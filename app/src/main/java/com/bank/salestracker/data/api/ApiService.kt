@@ -23,6 +23,9 @@ interface ApiService {
     @POST("sales")
     suspend fun addSale(@Body sale: Sale): Sale
 
+    @POST("sales/batch")
+    suspend fun addSalesBatch(@Body body: SaleBatchRequest): List<Sale>
+
     @GET("sales/my")
     suspend fun mySales(
         @Query("from") from: String? = null,

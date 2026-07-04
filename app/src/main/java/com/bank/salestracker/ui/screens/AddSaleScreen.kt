@@ -15,18 +15,32 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bank.salestracker.data.model.ProductCategory
-import com.bank.salestracker.data.model.Sale
+import com.bank.salestracker.data.model.SaleBatchItem
 import com.bank.salestracker.di.ServiceLocator
 import kotlinx.coroutines.launch
 
+private val moneyProducts = setOf(
+    ProductCategory.PDS,
+    ProductCategory.OPIF,
+    ProductCategory.KSP
+)
+
 class AddSaleVm : ViewModel() {
     var clientLast4 by mutableStateOf("")
-    var category by mutableStateOf<ProductCategory?>(null)
-    var amount by mutableStateOf("")
-    var quantity by mutableStateOf("1")
+    var selectedProducts = mutableStateListOf<ProductCategory>()
+    var amounts = mutableStateMapOf<ProductCategory, String>()
     var comment by mutableStateOf("")
     var loading by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
+
+    fun toggleProduct(product: ProductCategory) {
+        if (selectedProducts.contains(product)) {
+            selectedProducts.remove(product)
+            amounts.remove(product)
+        } else {
+            selectedProducts.add(product)
+        }
+    }
 
     fun save(onSaved: () -> Unit) {
         val last4 = clientLast4.filter(Char::isDigit).take(4)
@@ -34,29 +48,34 @@ class AddSaleVm : ViewModel() {
             message = "Введите последние 4 цифры телефона клиента"
             return
         }
-        val cat = category ?: run {
-            message = "Выберите продукт"
+        if (selectedProducts.isEmpty()) {
+            message = "Выберите хотя бы один продукт"
             return
         }
-        val qty = quantity.toIntOrNull()?.coerceIn(1, 99) ?: 1
-        val amt = amount.replace(",", ".").toDoubleOrNull()
+
+        val items = mutableListOf<SaleBatchItem>()
+        for (product in selectedProducts) {
+            val amount = amounts[product]?.replace(",", ".")?.toDoubleOrNull()
+            if (product in moneyProducts && (amount == null || amount <= 0)) {
+                message = "Укажите сумму для ${product.title}"
+                return
+            }
+            items.add(
+                SaleBatchItem(
+                    category = product,
+                    amount = amount,
+                    quantity = 1,
+                    comment = comment.ifBlank { null }
+                )
+            )
+        }
 
         viewModelScope.launch {
             loading = true
             message = null
-            val sentOnline = runCatching {
-                ServiceLocator.salesRepo.addSale(
-                    Sale(
-                        category = cat,
-                        clientLast4 = last4,
-                        amount = amt,
-                        quantity = qty,
-                        comment = comment.ifBlank { null }
-                    )
-                )
-            }.getOrDefault(false)
+            val sentOnline = ServiceLocator.salesRepo.addSalesBatch(last4, items)
             loading = false
-            message = if (sentOnline) "Продажа записана" else "Сохранено офлайн, отправится при появлении сети"
+            message = if (sentOnline) "Продажи записаны" else "Сохранено офлайн, отправится при появлении сети"
             onSaved()
         }
     }
@@ -91,40 +110,32 @@ fun AddSaleScreen(onSaved: () -> Unit, vm: AddSaleVm = viewModel()) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Text("Продукт", style = MaterialTheme.typography.titleSmall)
+            Text("Продукты", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProductCategory.entries.forEach { category ->
+                ProductCategory.entries.forEach { product ->
                     FilterChip(
-                        selected = vm.category == category,
-                        onClick = { vm.category = category },
-                        label = { Text(category.title) }
+                        selected = product in vm.selectedProducts,
+                        onClick = { vm.toggleProduct(product) },
+                        label = { Text(product.title) }
                     )
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            vm.selectedProducts.filter { it in moneyProducts }.forEach { product ->
                 OutlinedTextField(
-                    value = vm.amount,
-                    onValueChange = { vm.amount = it },
-                    label = { Text("Сумма, ₽") },
+                    value = vm.amounts[product].orEmpty(),
+                    onValueChange = { vm.amounts[product] = it.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' } },
+                    label = { Text("${product.title}: сумма, ₽") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    modifier = Modifier.weight(2f)
-                )
-                OutlinedTextField(
-                    value = vm.quantity,
-                    onValueChange = { vm.quantity = it.filter(Char::isDigit).take(2) },
-                    label = { Text("Кол-во") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             OutlinedTextField(
                 value = vm.comment,
                 onValueChange = { vm.comment = it.take(200) },
-                label = { Text("Комментарий") },
+                label = { Text("Комментарий ко всему набору") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -134,7 +145,8 @@ fun AddSaleScreen(onSaved: () -> Unit, vm: AddSaleVm = viewModel()) {
                 enabled = !vm.loading,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text(if (vm.loading) "Сохранение..." else "Записать продажу")
+                val count = vm.selectedProducts.size
+                Text(if (vm.loading) "Сохранение..." else "Записать продажи ($count)")
             }
         }
     }

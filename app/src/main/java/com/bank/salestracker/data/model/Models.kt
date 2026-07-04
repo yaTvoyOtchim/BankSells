@@ -80,6 +80,20 @@ data class AssignmentRequest(
 )
 
 @Serializable
+data class SaleBatchItem(
+    val category: ProductCategory,
+    val amount: Double? = null,
+    val quantity: Int = 1,
+    val comment: String? = null
+)
+
+@Serializable
+data class SaleBatchRequest(
+    val clientLast4: String,
+    val items: List<SaleBatchItem>
+)
+
+@Serializable
 enum class ProductCategory(val title: String) {
     DEBIT_CARD_STICKER_APPLICATION("ДК/стик(по заявке)"),
     CREDIT_CARD_SALE("КК(продажа)"),
@@ -113,6 +127,7 @@ data class Sale(
     val id: String? = null,
     val category: ProductCategory,
     val clientLast4: String,
+    val saleGroupId: String? = null,
     val amount: Double? = null,
     val quantity: Int = 1,
     val comment: String? = null,

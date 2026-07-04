@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS sales (
     org_unit_id  TEXT REFERENCES org_units(id),
     manager_id   TEXT REFERENCES users(id),
     client_last4 TEXT,
+    sale_group_id TEXT,
     updated_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sales_user_date ON sales(user_id, created_at);
@@ -114,12 +115,15 @@ def migrate(db) -> None:
     _add_column(db, "sales", "org_unit_id", "org_unit_id TEXT")
     _add_column(db, "sales", "manager_id", "manager_id TEXT")
     _add_column(db, "sales", "client_last4", "client_last4 TEXT")
+    _add_column(db, "sales", "sale_group_id", "sale_group_id TEXT")
     _add_column(db, "sales", "updated_at", "updated_at TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS idx_sales_org_date ON sales(org_unit_id, created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_sales_group ON sales(sale_group_id)")
     db.execute("UPDATE users SET registration_status='ACTIVE' WHERE registration_status IS NULL OR registration_status=''")
     db.execute("UPDATE users SET created_at=? WHERE created_at IS NULL", (now,))
     db.execute("UPDATE users SET updated_at=? WHERE updated_at IS NULL", (now,))
     db.execute("UPDATE sales SET updated_at=created_at WHERE updated_at IS NULL")
+    db.execute("UPDATE sales SET sale_group_id=id WHERE sale_group_id IS NULL OR sale_group_id=''")
     legacy_categories = {
         "DEBIT_CARD": "DEBIT_CARD_STICKER_APPLICATION",
         "CREDIT_CARD": "CREDIT_CARD_SALE",

@@ -7,6 +7,7 @@ import com.bank.salestracker.data.local.TokenStore
 import com.bank.salestracker.data.model.*
 import kotlinx.coroutines.flow.Flow
 import java.io.IOException
+import java.util.UUID
 
 class AuthRepository(private val api: ApiService, private val store: TokenStore) {
 
@@ -55,6 +56,7 @@ class SalesRepository(
     } catch (e: IOException) {
         pendingDao.insert(
             PendingSale(
+                saleGroupId = sale.saleGroupId ?: UUID.randomUUID().toString(),
                 category = sale.category.name,
                 clientLast4 = sale.clientLast4,
                 amount = sale.amount,
@@ -65,12 +67,35 @@ class SalesRepository(
         false
     }
 
+    suspend fun addSalesBatch(clientLast4: String, items: List<SaleBatchItem>): Boolean = try {
+        syncPending()
+        api.addSalesBatch(SaleBatchRequest(clientLast4, items))
+        true
+    } catch (e: IOException) {
+        val groupId = UUID.randomUUID().toString()
+        for (item in items) {
+            pendingDao.insert(
+                PendingSale(
+                    saleGroupId = groupId,
+                    category = item.category.name,
+                    clientLast4 = clientLast4,
+                    amount = item.amount,
+                    quantity = item.quantity,
+                    comment = item.comment
+                )
+            )
+        }
+        false
+    }
+
     /** Отправляет всё, что накопилось офлайн. */
     suspend fun syncPending() {
         val pending = pendingDao.all()
-        for (p in pending) {
-            api.addSale(p.toSale())   // если упадёт — останется в очереди
-            pendingDao.delete(p)
+        val groups = pending.groupBy { it.saleGroupId ?: it.localId.toString() }
+        for ((_, group) in groups) {
+            val clientLast4 = group.first().clientLast4 ?: "0000"
+            api.addSalesBatch(SaleBatchRequest(clientLast4, group.map { it.toBatchItem() }))
+            for (p in group) pendingDao.delete(p)
         }
     }
 

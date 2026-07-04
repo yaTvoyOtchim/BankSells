@@ -42,6 +42,7 @@ CATEGORY_TITLES = {
     "SALARY_LIGHT": "ЗП лайт",
 }
 CATEGORIES = set(CATEGORY_TITLES)
+REQUIRES_AMOUNT = {"PDS", "OPIF", "KSP"}
 
 EMPLOYEE_ID_RE = re.compile(r"^vtb\d+$")
 PENDING_ASSIGNMENT = "PENDING_ASSIGNMENT"
@@ -87,6 +88,18 @@ class SaleIn(BaseModel):
     comment: str | None = None
 
 
+class SaleBatchItemIn(BaseModel):
+    category: str
+    amount: float | None = None
+    quantity: int = Field(default=1, ge=1, le=99)
+    comment: str | None = None
+
+
+class SaleBatchIn(BaseModel):
+    clientLast4: str
+    items: list[SaleBatchItemIn] = Field(min_length=1)
+
+
 class AssignUserIn(BaseModel):
     orgUnitId: str | None = None
     role: str = "EMPLOYEE"
@@ -120,6 +133,14 @@ def validate_client_last4(value: str) -> str:
     if not re.fullmatch(r"\d{4}", cleaned):
         raise HTTPException(400, "Укажите последние 4 цифры телефона клиента")
     return cleaned
+
+
+def validate_sale_item(category: str, amount: float | None) -> None:
+    if category not in CATEGORIES:
+        raise HTTPException(400, "Неизвестная категория")
+    if category in REQUIRES_AMOUNT and (amount is None or amount <= 0):
+        title = CATEGORY_TITLES.get(category, category)
+        raise HTTPException(400, f"Для продукта {title} нужно указать сумму")
 
 
 def user_dto(row) -> dict:
@@ -379,11 +400,51 @@ def add_sale(body: SaleIn, user: dict = Depends(require_work_access)):
     }
 
 
+@app.post("/api/sales/batch")
+def add_sales_batch(body: SaleBatchIn, user: dict = Depends(require_work_access)):
+    client_last4 = validate_client_last4(body.clientLast4)
+    sale_group_id = d.new_id()
+    created = now_utc()
+    result = []
+    with d.connect() as db:
+        assignment = active_assignment(db, user["id"])
+        if not assignment:
+            raise HTTPException(403, "Сотрудник не привязан к офису")
+        for item in body.items:
+            validate_sale_item(item.category, item.amount)
+        for item in body.items:
+            sale_id = d.new_id()
+            db.execute(
+                "INSERT INTO sales(id, user_id, category, amount, quantity, comment, created_at, source, "
+                "org_unit_id, manager_id, client_last4, sale_group_id, updated_at) "
+                "VALUES (?,?,?,?,?,?,?, 'app', ?, ?, ?, ?, ?)",
+                (
+                    sale_id, user["id"], item.category, item.amount, item.quantity, item.comment, created,
+                    assignment["org_unit_id"], assignment["assigned_by_user_id"], client_last4, sale_group_id, created,
+                ),
+            )
+            result.append({
+                "id": sale_id,
+                "category": item.category,
+                "clientLast4": client_last4,
+                "saleGroupId": sale_group_id,
+                "amount": item.amount,
+                "quantity": item.quantity,
+                "comment": item.comment,
+                "createdAt": created,
+                "employeeId": user["employee_id"],
+                "employeeName": user["full_name"],
+            })
+        audit(db, user["id"], "sales_batch_added", f"{len(body.items)} products client:{client_last4}")
+    return result
+
+
 def _sales_rows_to_dto(rows) -> list[dict]:
     return [{
         "id": r["id"],
         "category": r["category"],
         "clientLast4": r["client_last4"],
+        "saleGroupId": r["sale_group_id"],
         "amount": r["amount"],
         "quantity": r["quantity"],
         "comment": r["comment"],
