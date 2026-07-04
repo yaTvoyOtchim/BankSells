@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 
-class SalesBatchTest(unittest.TestCase):
+class ProductCatalogTest(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         os.environ["SALES_DB"] = str(Path(self.tmpdir.name) / "sales.db")
@@ -21,7 +21,6 @@ class SalesBatchTest(unittest.TestCase):
         self.client = TestClient(self.main.app)
         self._create_active_user("vtb70336144", "Admin VTB", "ADMIN", "VtbAdmin123", "office-7")
         self._create_active_user("vtb70336145", "Employee VTB", "EMPLOYEE", "VtbUser123", "office-7-main")
-
         self.admin_token = self._login("vtb70336144", "VtbAdmin123")
         self.employee_token = self._login("vtb70336145", "VtbUser123")
 
@@ -57,77 +56,90 @@ class SalesBatchTest(unittest.TestCase):
                 (self.main.d.new_id(), user_id, org["id"], role, now, "test user"),
             )
 
-    def _product_id(self, code: str) -> str:
+    def product_id(self, code: str) -> str:
         with self.main.d.connect() as db:
             row = db.execute("SELECT id FROM products WHERE code=?", (code,)).fetchone()
         self.assertIsNotNone(row)
         return row["id"]
 
-    def test_batch_sale_creates_multiple_products_for_one_client(self):
-        response = self.client.post(
-            "/api/sales/batch",
+    def test_default_products_are_seeded_for_demo_office(self):
+        with self.main.d.connect() as db:
+            pds = db.execute("SELECT * FROM products WHERE code='PDS'").fetchone()
+            self.assertIsNotNone(pds)
+            setting = db.execute(
+                "SELECT ops.* FROM office_product_settings ops "
+                "JOIN org_units o ON o.id=ops.org_unit_id "
+                "WHERE ops.product_id=? AND o.code='office-7'",
+                (pds["id"],),
+            ).fetchone()
+            self.assertIsNotNone(setting)
+            self.assertEqual(setting["requires_amount"], 1)
+            self.assertEqual(setting["active"], 1)
+
+    def test_employee_gets_active_products_for_own_office(self):
+        response = self.client.get(
+            "/api/products/active",
             headers={"Authorization": f"Bearer {self.employee_token}"},
-            json={
-                "clientLast4": "1234",
-                "items": [
-                    {"category": "DEBIT_CARD_STICKER_APPLICATION", "quantity": 1},
-                    {"category": "STICKER", "quantity": 1},
-                    {"category": "AUTO_PAYMENTS", "quantity": 1},
-                    {"category": "PDS", "quantity": 1, "amount": 50000},
-                ],
-            },
         )
 
         self.assertEqual(response.status_code, 200, response.text)
-        sales = response.json()
-        self.assertEqual(len(sales), 4)
-        self.assertEqual({sale["clientLast4"] for sale in sales}, {"1234"})
-        self.assertEqual(len({sale["saleGroupId"] for sale in sales}), 1)
-        self.assertEqual(
-            [sale["category"] for sale in sales],
-            ["DEBIT_CARD_STICKER_APPLICATION", "STICKER", "AUTO_PAYMENTS", "PDS"],
-        )
-        self.assertEqual(sales[-1]["amount"], 50000)
+        products = response.json()
+        pds = next(product for product in products if product["code"] == "PDS")
+        self.assertEqual(pds["title"], "ПДС")
+        self.assertEqual(pds["points"], 1)
+        self.assertEqual(pds["requiresAmount"], True)
+        self.assertEqual(pds["active"], True)
 
-    def test_batch_sale_requires_amount_for_money_products(self):
-        response = self.client.post(
-            "/api/sales/batch",
+    def test_employee_cannot_edit_office_product(self):
+        response = self.client.patch(
+            f"/api/management/offices/office-7/products/{self.product_id('PDS')}",
             headers={"Authorization": f"Bearer {self.employee_token}"},
-            json={
-                "clientLast4": "5678",
-                "items": [{"category": "OPIF", "quantity": 1}],
-            },
+            json={"points": 5},
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("сумм", response.text.lower())
+        self.assertEqual(response.status_code, 403)
 
-    def test_batch_sale_uses_office_product_snapshot(self):
-        response = self.client.post(
-            "/api/sales/batch",
-            headers={"Authorization": f"Bearer {self.employee_token}"},
-            json={
-                "clientLast4": "1111",
-                "items": [{"productId": self._product_id("PDS"), "quantity": 1, "amount": 10000}],
-            },
-        )
-
-        self.assertEqual(response.status_code, 200, response.text)
-        sale = response.json()[0]
-        self.assertEqual(sale["category"], "PDS")
-        self.assertEqual(sale["productTitle"], "ПДС")
-        self.assertEqual(sale["points"], 1)
-        self.assertEqual(sale["pointsTotal"], 1)
-        self.assertEqual(sale["requiresAmount"], True)
-
-    def test_manager_cannot_add_sales(self):
-        response = self.client.post(
-            "/api/sales/batch",
+    def test_manager_updates_office_product_and_history(self):
+        product_id = self.product_id("PDS")
+        response = self.client.patch(
+            f"/api/management/offices/office-7/products/{product_id}",
             headers={"Authorization": f"Bearer {self.admin_token}"},
-            json={
-                "clientLast4": "2222",
-                "items": [{"productId": self._product_id("PDS"), "quantity": 1, "amount": 10000}],
-            },
+            json={"points": 5, "requiresAmount": True, "active": True},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        updated = response.json()
+        self.assertEqual(updated["points"], 5)
+        self.assertEqual(updated["requiresAmount"], True)
+        with self.main.d.connect() as db:
+            rows = db.execute(
+                "SELECT * FROM product_change_history WHERE product_id=? AND field_name='points'",
+                (product_id,),
+            ).fetchall()
+        self.assertGreaterEqual(len(rows), 1)
+
+    def test_admin_creates_product_hidden_for_office(self):
+        response = self.client.post(
+            "/api/admin/products",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+            json={"code": "NEW_PRODUCT", "title": "Новый продукт", "groupName": "Тест"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        product = response.json()
+        self.assertEqual(product["code"], "NEW_PRODUCT")
+        office_products = self.client.get(
+            "/api/management/offices/office-7/products",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        ).json()
+        created_setting = next(item for item in office_products if item["code"] == "NEW_PRODUCT")
+        self.assertEqual(created_setting["active"], False)
+
+    def test_employee_cannot_create_product(self):
+        response = self.client.post(
+            "/api/admin/products",
+            headers={"Authorization": f"Bearer {self.employee_token}"},
+            json={"code": "NOPE", "title": "Нельзя", "groupName": "Тест"},
         )
 
         self.assertEqual(response.status_code, 403)

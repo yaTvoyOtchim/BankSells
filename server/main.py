@@ -14,35 +14,9 @@ import db as d
 
 TZ = ZoneInfo(os.environ.get("SALES_TZ", "Europe/Istanbul"))
 
-CATEGORY_TITLES = {
-    "DEBIT_CARD_STICKER_APPLICATION": "ДК/стик(по заявке)",
-    "CREDIT_CARD_SALE": "КК(продажа)",
-    "CREDIT_CARD_APPLICATION": "КК(по заявке)",
-    "PDS": "ПДС",
-    "CREDIT_CARD_INSURANCE": "Страховка КК",
-    "SOM": "СОМ",
-    "KSP": "КСП",
-    "STICKER": "СТИК",
-    "PENSION": "Пенсия",
-    "SALARY_PROJECT": "ИЗП",
-    "CASH_LOAN_APPLICATION": "КН Заявка",
-    "CASH_LOAN_SALE": "КН продажа",
-    "SUBSCRIPTION": "Подписка",
-    "CARD_PLUS": "Карта+",
-    "SOCIAL_PAYOUTS": "Соц. Выплаты",
-    "MASS_ISSUE": "Масс. выдача",
-    "OPIF": "ОПИФ",
-    "AUTO_PAYMENTS": "Автоплатежи",
-    "SAVINGS_ACCOUNT": "Накопительный счет",
-    "AUTO_PULLING": "Автостягивание",
-    "FAMILY_BANK": "Сем. Банк",
-    "SALARY_CARD_ISSUE": "Выдача ЗП карт",
-    "DEBIT_CARD_ADDITIONAL": "ДК(доп.карта)",
-    "PRIVILEGE": "Привилегия",
-    "SALARY_LIGHT": "ЗП лайт",
-}
+CATEGORY_TITLES = {code: title for code, title, _ in d.DEFAULT_PRODUCTS}
 CATEGORIES = set(CATEGORY_TITLES)
-REQUIRES_AMOUNT = {"PDS", "OPIF", "KSP"}
+REQUIRES_AMOUNT = set(d.AMOUNT_REQUIRED_PRODUCT_CODES)
 
 EMPLOYEE_ID_RE = re.compile(r"^vtb\d+$")
 PENDING_ASSIGNMENT = "PENDING_ASSIGNMENT"
@@ -81,7 +55,8 @@ class ChangePasswordIn(BaseModel):
 
 
 class SaleIn(BaseModel):
-    category: str
+    category: str | None = None
+    productId: str | None = None
     clientLast4: str
     amount: float | None = None
     quantity: int = Field(default=1, ge=1, le=99)
@@ -89,7 +64,8 @@ class SaleIn(BaseModel):
 
 
 class SaleBatchItemIn(BaseModel):
-    category: str
+    category: str | None = None
+    productId: str | None = None
     amount: float | None = None
     quantity: int = Field(default=1, ge=1, le=99)
     comment: str | None = None
@@ -98,6 +74,21 @@ class SaleBatchItemIn(BaseModel):
 class SaleBatchIn(BaseModel):
     clientLast4: str
     items: list[SaleBatchItemIn] = Field(min_length=1)
+
+
+class ProductSettingPatchIn(BaseModel):
+    active: bool | None = None
+    points: float | None = Field(default=None, ge=0)
+    requiresAmount: bool | None = None
+    countsTowardPlan: bool | None = None
+    sortOrder: int | None = None
+
+
+class ProductCreateIn(BaseModel):
+    code: str = Field(min_length=2, max_length=60)
+    title: str = Field(min_length=1, max_length=120)
+    groupName: str = ""
+    description: str | None = None
 
 
 class AssignUserIn(BaseModel):
@@ -186,9 +177,21 @@ def require_work_access(user: dict = Depends(current_user)) -> dict:
     return user
 
 
+def require_sales_access(user: dict = Depends(require_work_access)) -> dict:
+    if user["role"] != "EMPLOYEE":
+        raise HTTPException(403, "Продажи может вносить только сотрудник")
+    return user
+
+
 def require_manager(user: dict = Depends(require_work_access)) -> dict:
     if user["role"] not in MANAGER_ROLES:
         raise HTTPException(403, "Только для руководителя")
+    return user
+
+
+def require_admin(user: dict = Depends(require_work_access)) -> dict:
+    if user["role"] != "ADMIN":
+        raise HTTPException(403, "Только для администратора")
     return user
 
 
@@ -235,6 +238,95 @@ def org_display_name(db, org_unit_id: str | None) -> str:
         return ""
     row = db.execute("SELECT name FROM org_units WHERE id=?", (org_unit_id,)).fetchone()
     return row["name"] if row else ""
+
+
+def office_for_org_unit(db, org_unit_id: str | None) -> str | None:
+    current = org_unit_id
+    while current:
+        row = db.execute("SELECT id, type, parent_id FROM org_units WHERE id=?", (current,)).fetchone()
+        if not row:
+            return None
+        if row["type"] == "OFFICE":
+            return row["id"]
+        current = row["parent_id"]
+    return None
+
+
+def resolve_org_unit(db, identifier: str):
+    return db.execute(
+        "SELECT * FROM org_units WHERE id=? OR code=?",
+        (identifier, identifier),
+    ).fetchone()
+
+
+def ensure_visible_org(db, manager: dict, org_unit_id: str) -> None:
+    ids = visible_org_ids(db, manager)
+    if ids is not None and org_unit_id not in ids:
+        raise HTTPException(403, "Подразделение вне вашей структуры")
+
+
+def product_setting_dto(row) -> dict:
+    return {
+        "id": row["setting_id"],
+        "productId": row["product_id"],
+        "code": row["code"],
+        "title": row["title"],
+        "groupName": row["group_name"] or "",
+        "active": bool(row["active"]),
+        "points": row["points"],
+        "requiresAmount": bool(row["requires_amount"]),
+        "countsTowardPlan": bool(row["counts_toward_plan"]),
+        "sortOrder": row["sort_order"],
+    }
+
+
+def product_dto(row) -> dict:
+    return {
+        "id": row["id"],
+        "productId": row["id"],
+        "code": row["code"],
+        "title": row["title"],
+        "groupName": row["group_name"] or "",
+        "description": row["description"],
+        "archived": bool(row["archived"]),
+    }
+
+
+def product_settings_rows(db, office_id: str, only_active: bool = False):
+    query = (
+        "SELECT ops.id setting_id, ops.product_id, ops.active, ops.points, ops.requires_amount, "
+        "ops.counts_toward_plan, ops.sort_order, p.code, p.title, p.group_name, p.archived "
+        "FROM office_product_settings ops JOIN products p ON p.id=ops.product_id "
+        "WHERE ops.org_unit_id=? AND p.archived=0"
+    )
+    params: list = [office_id]
+    if only_active:
+        query += " AND ops.active=1"
+    query += " ORDER BY ops.sort_order, p.title"
+    return db.execute(query, params).fetchall()
+
+
+def resolve_sale_product(db, *, product_id: str | None, category: str | None, org_unit_id: str, amount: float | None):
+    office_id = office_for_org_unit(db, org_unit_id)
+    if not office_id:
+        raise HTTPException(403, "Не найден офис сотрудника")
+    if not product_id and not category:
+        raise HTTPException(400, "Не выбран продукт")
+
+    where = "p.id=?" if product_id else "p.code=?"
+    value = product_id if product_id else category
+    row = db.execute(
+        "SELECT p.id product_id, p.code, p.title, p.group_name, p.archived, "
+        "ops.id setting_id, ops.active, ops.points, ops.requires_amount, ops.counts_toward_plan, ops.sort_order "
+        "FROM products p JOIN office_product_settings ops ON ops.product_id=p.id "
+        f"WHERE {where} AND ops.org_unit_id=?",
+        (value, office_id),
+    ).fetchone()
+    if not row or row["archived"] or not row["active"]:
+        raise HTTPException(400, "Продукт недоступен для этого офиса")
+    if row["requires_amount"] and (amount is None or amount <= 0):
+        raise HTTPException(400, f"Для продукта {row['title']} нужно указать сумму")
+    return row
 
 
 def resolve_user(db, identifier: str):
@@ -367,10 +459,138 @@ def profile(user: dict = Depends(current_user)):
     return user_dto(user)
 
 
+@app.get("/api/products/active")
+def active_products(user: dict = Depends(require_work_access)):
+    with d.connect() as db:
+        assignment = active_assignment(db, user["id"])
+        if not assignment:
+            raise HTTPException(403, "Сотрудник не привязан к офису")
+        office_id = office_for_org_unit(db, assignment["org_unit_id"])
+        if not office_id:
+            raise HTTPException(403, "Не найден офис сотрудника")
+        rows = product_settings_rows(db, office_id, only_active=True)
+    return [product_setting_dto(row) for row in rows]
+
+
+@app.get("/api/management/offices/{org_unit_id}/products")
+def management_office_products(org_unit_id: str, manager: dict = Depends(require_manager)):
+    with d.connect() as db:
+        org = resolve_org_unit(db, org_unit_id)
+        if not org:
+            raise HTTPException(404, "Офис не найден")
+        office_id = office_for_org_unit(db, org["id"]) if org["type"] != "OFFICE" else org["id"]
+        if not office_id:
+            raise HTTPException(400, "Выберите офис или команду внутри офиса")
+        ensure_visible_org(db, manager, office_id)
+        rows = product_settings_rows(db, office_id, only_active=False)
+    return [product_setting_dto(row) for row in rows]
+
+
+@app.patch("/api/management/offices/{org_unit_id}/products/{product_id}")
+def update_office_product(org_unit_id: str, product_id: str, body: ProductSettingPatchIn,
+                          manager: dict = Depends(require_manager)):
+    with d.connect() as db:
+        org = resolve_org_unit(db, org_unit_id)
+        if not org:
+            raise HTTPException(404, "Офис не найден")
+        office_id = office_for_org_unit(db, org["id"]) if org["type"] != "OFFICE" else org["id"]
+        if not office_id:
+            raise HTTPException(400, "Выберите офис или команду внутри офиса")
+        ensure_visible_org(db, manager, office_id)
+        row = db.execute(
+            "SELECT ops.*, p.code, p.title, p.group_name FROM office_product_settings ops "
+            "JOIN products p ON p.id=ops.product_id WHERE ops.org_unit_id=? AND ops.product_id=?",
+            (office_id, product_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Настройка продукта не найдена")
+
+        changes: list[tuple[str, object, object]] = []
+        updates: list[str] = []
+        params: list = []
+        field_map = [
+            ("active", body.active, lambda v: 1 if v else 0),
+            ("points", body.points, float),
+            ("requires_amount", body.requiresAmount, lambda v: 1 if v else 0),
+            ("counts_toward_plan", body.countsTowardPlan, lambda v: 1 if v else 0),
+            ("sort_order", body.sortOrder, int),
+        ]
+        for field_name, value, convert in field_map:
+            if value is None:
+                continue
+            converted = convert(value)
+            if row[field_name] != converted:
+                changes.append((field_name, row[field_name], converted))
+                updates.append(f"{field_name}=?")
+                params.append(converted)
+        changed_at = now_utc()
+        if updates:
+            updates.extend(["updated_by_user_id=?", "updated_at=?"])
+            params.extend([manager["id"], changed_at, row["id"]])
+            db.execute(f"UPDATE office_product_settings SET {', '.join(updates)} WHERE id=?", params)
+            for field_name, old_value, new_value in changes:
+                db.execute(
+                    "INSERT INTO product_change_history(id, product_id, org_unit_id, changed_by_user_id, "
+                    "changed_at, field_name, old_value, new_value) VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        d.new_id(), product_id, office_id, manager["id"], changed_at, field_name,
+                        str(old_value), str(new_value),
+                    ),
+                )
+            audit(db, manager["id"], "product_setting_updated", f"{row['code']} {office_id}")
+        updated = db.execute(
+            "SELECT ops.id setting_id, ops.product_id, ops.active, ops.points, ops.requires_amount, "
+            "ops.counts_toward_plan, ops.sort_order, p.code, p.title, p.group_name "
+            "FROM office_product_settings ops JOIN products p ON p.id=ops.product_id WHERE ops.id=?",
+            (row["id"],),
+        ).fetchone()
+    return product_setting_dto(updated)
+
+
+@app.get("/api/admin/products")
+def admin_products(admin: dict = Depends(require_admin)):
+    with d.connect() as db:
+        rows = db.execute("SELECT * FROM products ORDER BY archived, title").fetchall()
+    return [product_dto(row) for row in rows]
+
+
+@app.post("/api/admin/products")
+def create_product(body: ProductCreateIn, admin: dict = Depends(require_admin)):
+    code = body.code.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9_]+", code):
+        raise HTTPException(400, "Код продукта должен содержать латинские буквы, цифры или _")
+    title = body.title.strip()
+    group_name = body.groupName.strip()
+    created = now_utc()
+    with d.connect() as db:
+        existing = db.execute("SELECT id FROM products WHERE code=?", (code,)).fetchone()
+        if existing:
+            raise HTTPException(409, "Продукт с таким кодом уже существует")
+        product_id = d.new_id()
+        db.execute(
+            "INSERT INTO products(id, code, title, group_name, description, archived, created_by_user_id, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,0,?,?,?)",
+            (product_id, code, title, group_name, body.description, admin["id"], created, created),
+        )
+        offices = db.execute("SELECT id FROM org_units WHERE type='OFFICE' AND active=1").fetchall()
+        for office in offices:
+            max_order = db.execute(
+                "SELECT COALESCE(MAX(sort_order), 0) value FROM office_product_settings WHERE org_unit_id=?",
+                (office["id"],),
+            ).fetchone()["value"]
+            db.execute(
+                "INSERT INTO office_product_settings(id, product_id, org_unit_id, active, points, "
+                "requires_amount, counts_toward_plan, sort_order, updated_by_user_id, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (d.new_id(), product_id, office["id"], 0, 1, 0, 1, max_order + 10, admin["id"], created, created),
+            )
+        audit(db, admin["id"], "product_created", code)
+        row = db.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
+    return product_dto(row)
+
+
 @app.post("/api/sales")
-def add_sale(body: SaleIn, user: dict = Depends(require_work_access)):
-    if body.category not in CATEGORIES:
-        raise HTTPException(400, "Неизвестная категория")
+def add_sale(body: SaleIn, user: dict = Depends(require_sales_access)):
     client_last4 = validate_client_last4(body.clientLast4)
     sale_id = d.new_id()
     created = now_utc()
@@ -378,18 +598,36 @@ def add_sale(body: SaleIn, user: dict = Depends(require_work_access)):
         assignment = active_assignment(db, user["id"])
         if not assignment:
             raise HTTPException(403, "Сотрудник не привязан к офису")
+        product = resolve_sale_product(
+            db,
+            product_id=body.productId,
+            category=body.category,
+            org_unit_id=assignment["org_unit_id"],
+            amount=body.amount,
+        )
         db.execute(
-            "INSERT INTO sales(id, user_id, category, amount, quantity, comment, created_at, source, org_unit_id, manager_id, client_last4, updated_at) "
-            "VALUES (?,?,?,?,?,?,?, 'app', ?, ?, ?, ?)",
+            "INSERT INTO sales(id, user_id, category, amount, quantity, comment, created_at, source, "
+            "org_unit_id, manager_id, client_last4, product_id, product_code_snapshot, product_title_snapshot, "
+            "product_group_snapshot, points_snapshot, requires_amount_snapshot, counts_toward_plan_snapshot, updated_at) "
+            "VALUES (?,?,?,?,?,?,?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                sale_id, user["id"], body.category, body.amount, body.quantity, body.comment, created,
-                assignment["org_unit_id"], assignment["assigned_by_user_id"], client_last4, created,
+                sale_id, user["id"], product["code"], body.amount, body.quantity, body.comment, created,
+                assignment["org_unit_id"], assignment["assigned_by_user_id"], client_last4,
+                product["product_id"], product["code"], product["title"], product["group_name"],
+                product["points"], product["requires_amount"], product["counts_toward_plan"], created,
             ),
         )
-        audit(db, user["id"], "sale_added", f"{body.category} x{body.quantity} client:{client_last4}")
+        audit(db, user["id"], "sale_added", f"{product['code']} x{body.quantity} client:{client_last4}")
     return {
         "id": sale_id,
-        "category": body.category,
+        "category": product["code"],
+        "productId": product["product_id"],
+        "productTitle": product["title"],
+        "productGroup": product["group_name"],
+        "points": product["points"],
+        "pointsTotal": product["points"] * body.quantity,
+        "requiresAmount": bool(product["requires_amount"]),
+        "countsTowardPlan": bool(product["counts_toward_plan"]),
         "clientLast4": client_last4,
         "amount": body.amount,
         "quantity": body.quantity,
@@ -401,7 +639,7 @@ def add_sale(body: SaleIn, user: dict = Depends(require_work_access)):
 
 
 @app.post("/api/sales/batch")
-def add_sales_batch(body: SaleBatchIn, user: dict = Depends(require_work_access)):
+def add_sales_batch(body: SaleBatchIn, user: dict = Depends(require_sales_access)):
     client_last4 = validate_client_last4(body.clientLast4)
     sale_group_id = d.new_id()
     created = now_utc()
@@ -410,22 +648,40 @@ def add_sales_batch(body: SaleBatchIn, user: dict = Depends(require_work_access)
         assignment = active_assignment(db, user["id"])
         if not assignment:
             raise HTTPException(403, "Сотрудник не привязан к офису")
+        resolved_products = []
         for item in body.items:
-            validate_sale_item(item.category, item.amount)
-        for item in body.items:
+            resolved_products.append(resolve_sale_product(
+                db,
+                product_id=item.productId,
+                category=item.category,
+                org_unit_id=assignment["org_unit_id"],
+                amount=item.amount,
+            ))
+        for item, product in zip(body.items, resolved_products):
             sale_id = d.new_id()
             db.execute(
                 "INSERT INTO sales(id, user_id, category, amount, quantity, comment, created_at, source, "
-                "org_unit_id, manager_id, client_last4, sale_group_id, updated_at) "
-                "VALUES (?,?,?,?,?,?,?, 'app', ?, ?, ?, ?, ?)",
+                "org_unit_id, manager_id, client_last4, sale_group_id, product_id, product_code_snapshot, "
+                "product_title_snapshot, product_group_snapshot, points_snapshot, requires_amount_snapshot, "
+                "counts_toward_plan_snapshot, updated_at) "
+                "VALUES (?,?,?,?,?,?,?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    sale_id, user["id"], item.category, item.amount, item.quantity, item.comment, created,
-                    assignment["org_unit_id"], assignment["assigned_by_user_id"], client_last4, sale_group_id, created,
+                    sale_id, user["id"], product["code"], item.amount, item.quantity, item.comment, created,
+                    assignment["org_unit_id"], assignment["assigned_by_user_id"], client_last4, sale_group_id,
+                    product["product_id"], product["code"], product["title"], product["group_name"],
+                    product["points"], product["requires_amount"], product["counts_toward_plan"], created,
                 ),
             )
             result.append({
                 "id": sale_id,
-                "category": item.category,
+                "category": product["code"],
+                "productId": product["product_id"],
+                "productTitle": product["title"],
+                "productGroup": product["group_name"],
+                "points": product["points"],
+                "pointsTotal": product["points"] * item.quantity,
+                "requiresAmount": bool(product["requires_amount"]),
+                "countsTowardPlan": bool(product["counts_toward_plan"]),
                 "clientLast4": client_last4,
                 "saleGroupId": sale_group_id,
                 "amount": item.amount,
@@ -440,18 +696,32 @@ def add_sales_batch(body: SaleBatchIn, user: dict = Depends(require_work_access)
 
 
 def _sales_rows_to_dto(rows) -> list[dict]:
-    return [{
-        "id": r["id"],
-        "category": r["category"],
-        "clientLast4": r["client_last4"],
-        "saleGroupId": r["sale_group_id"],
-        "amount": r["amount"],
-        "quantity": r["quantity"],
-        "comment": r["comment"],
-        "createdAt": r["created_at"],
-        "employeeId": r["employee_id"],
-        "employeeName": r["full_name"],
-    } for r in rows]
+    result = []
+    for r in rows:
+        category = r["product_code_snapshot"] or r["category"]
+        title = r["product_title_snapshot"] or CATEGORY_TITLES.get(category, category)
+        points = r["points_snapshot"] if r["points_snapshot"] is not None else 1
+        quantity = r["quantity"]
+        result.append({
+            "id": r["id"],
+            "category": category,
+            "productId": r["product_id"],
+            "productTitle": title,
+            "productGroup": r["product_group_snapshot"] or "",
+            "points": points,
+            "pointsTotal": points * quantity,
+            "requiresAmount": bool(r["requires_amount_snapshot"]),
+            "countsTowardPlan": bool(r["counts_toward_plan_snapshot"]),
+            "clientLast4": r["client_last4"],
+            "saleGroupId": r["sale_group_id"],
+            "amount": r["amount"],
+            "quantity": quantity,
+            "comment": r["comment"],
+            "createdAt": r["created_at"],
+            "employeeId": r["employee_id"],
+            "employeeName": r["full_name"],
+        })
+    return result
 
 
 @app.get("/api/sales/my")
