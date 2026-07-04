@@ -4,9 +4,20 @@ package com.bank.salestracker.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -14,12 +25,35 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -32,6 +66,10 @@ import com.bank.salestracker.data.model.Sale
 import com.bank.salestracker.data.model.User
 import com.bank.salestracker.data.model.displayTitle
 import com.bank.salestracker.di.ServiceLocator
+import com.bank.salestracker.ui.theme.AppBackground
+import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.GlassTopBar
+import com.bank.salestracker.ui.theme.MetricGlassCard
 import kotlinx.coroutines.launch
 
 class AdminVm : ViewModel() {
@@ -112,119 +150,110 @@ fun AdminScreen(
     val scope = rememberCoroutineScope()
     var goalDialogFor by remember { mutableStateOf<EmployeeSummary?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Команда") },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            vm.exportCsv()?.let { csv ->
-                                context.startActivity(
-                                    Intent.createChooser(
-                                        Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/csv"
-                                            putExtra(Intent.EXTRA_TEXT, csv)
-                                        },
-                                        "Экспорт CSV"
-                                    )
-                                )
-                            }
-                        }
-                    }) { Icon(Icons.Default.FileDownload, "Экспорт CSV") }
-                }
-            )
-        }
-    ) { pad ->
-        LazyColumn(
-            Modifier.padding(pad).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            item {
-                Card(Modifier.fillMaxWidth().clickable(onClick = onProductsClick)) {
-                    ListItem(
-                        leadingContent = { Icon(Icons.Default.Settings, null) },
-                        headlineContent = { Text("Продукты офиса") },
-                        supportingContent = { Text("Баллы, активность и сумма по продуктам") }
-                    )
-                }
-            }
-
-            item { AddEmployeePanel(vm) }
-
-            item {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf("today" to "Сегодня", "week" to "Неделя", "month" to "Месяц").forEachIndexed { index, item ->
-                        SegmentedButton(
-                            selected = vm.period == item.first,
-                            onClick = { vm.selectPeriod(item.first) },
-                            shape = SegmentedButtonDefaults.itemShape(index, 3)
-                        ) { Text(item.second) }
-                    }
-                }
-            }
-
-            if (vm.loading) {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                return@LazyColumn
-            }
-
-            vm.report?.let { report ->
-                item {
-                    Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            MetricColumn("${report.branchTodayCount}", "сегодня", Modifier.weight(1f))
-                            MetricColumn("${report.branchMonthCount}", "за месяц", Modifier.weight(1f))
-                            MetricColumn("%,.0f".format(report.branchMonthAmount), "₽ за месяц", Modifier.weight(1f))
-                            MetricColumn(formatPoints(report.branchMonthPoints), "баллы", Modifier.weight(1f))
-                        }
-                    }
-                }
-
-                item { Text("Рейтинг сотрудников", style = MaterialTheme.typography.titleMedium) }
-
-                val sorted = report.employees.sortedByDescending { it.monthCount }
-                items(sorted) { employee ->
-                    val place = sorted.indexOf(employee) + 1
-                    Card(Modifier.fillMaxWidth().clickable { onEmployeeClick(employee.user.id) }) {
-                        ListItem(
-                            leadingContent = {
-                                if (place <= 3) {
-                                    Icon(
-                                        Icons.Default.EmojiEvents,
-                                        null,
-                                        tint = when (place) {
-                                            1 -> MaterialTheme.colorScheme.tertiary
-                                            2 -> MaterialTheme.colorScheme.outline
-                                            else -> MaterialTheme.colorScheme.secondary
-                                        }
-                                    )
-                                } else {
-                                    Text("$place", style = MaterialTheme.typography.titleMedium)
-                                }
-                            },
-                            headlineContent = { Text(employee.user.fullName) },
-                            supportingContent = {
-                                Column {
-                                    Text("Сегодня: ${employee.todayCount} · Период: ${employee.monthCount} · ${formatPoints(employee.monthPoints)} б. · %,.0f ₽".format(employee.monthAmount))
-                                    employee.goalProgress?.let { progress ->
-                                        Spacer(Modifier.height(4.dp))
-                                        LinearProgressIndicator(
-                                            progress = { progress.coerceIn(0f, 1f) },
-                                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                                            strokeCap = StrokeCap.Round
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    GlassTopBar(
+                        title = "Команда",
+                        subtitle = "Офис, сотрудники и результаты",
+                        trailing = {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    vm.exportCsv()?.let { csv ->
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/csv"
+                                                    putExtra(Intent.EXTRA_TEXT, csv)
+                                                },
+                                                "Экспорт CSV"
+                                            )
                                         )
                                     }
                                 }
-                            },
-                            trailingContent = {
-                                TextButton(onClick = { goalDialogFor = employee }) { Text("План") }
+                            }) {
+                                Icon(Icons.Default.FileDownload, "Экспорт CSV")
                             }
+                        }
+                    )
+                }
+            }
+        ) { pad ->
+            LazyColumn(
+                Modifier.padding(pad).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                item {
+                    GlassSurface(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onProductsClick),
+                        contentPadding = PaddingValues(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Продукты офиса", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "Баллы, активность и суммы по продуктам",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item { AddEmployeePanel(vm) }
+
+                item {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        listOf("today" to "Сегодня", "week" to "Неделя", "month" to "Месяц").forEachIndexed { index, item ->
+                            SegmentedButton(
+                                selected = vm.period == item.first,
+                                onClick = { vm.selectPeriod(item.first) },
+                                shape = SegmentedButtonDefaults.itemShape(index, 3)
+                            ) { Text(item.second) }
+                        }
+                    }
+                }
+
+                if (vm.loading) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    return@LazyColumn
+                }
+
+                vm.report?.let { report ->
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                MetricGlassCard("${report.branchTodayCount}", "сегодня", Modifier.weight(1f))
+                                MetricGlassCard("${report.branchMonthCount}", "месяц", Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                MetricGlassCard("%,.0f ₽".format(report.branchMonthAmount), "сумма", Modifier.weight(1f))
+                                MetricGlassCard(formatAdminPoints(report.branchMonthPoints), "баллы", Modifier.weight(1f))
+                            }
+                        }
+                    }
+
+                    item { Text("Рейтинг сотрудников", style = MaterialTheme.typography.titleMedium) }
+
+                    val sorted = report.employees.sortedByDescending { it.monthCount }
+                    itemsIndexed(sorted, key = { _, employee -> employee.user.id }) { index, employee ->
+                        EmployeeRankRow(
+                            place = index + 1,
+                            employee = employee,
+                            onClick = { onEmployeeClick(employee.user.id) },
+                            onGoalClick = { goalDialogFor = employee }
                         )
                     }
                 }
@@ -258,8 +287,8 @@ fun AdminScreen(
 
 @Composable
 private fun AddEmployeePanel(vm: AdminVm) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Добавить сотрудника", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = vm.employeeQuery,
@@ -290,11 +319,11 @@ private fun AddEmployeePanel(vm: AdminVm) {
             }
 
             vm.foundUser?.let { user ->
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                GlassSurface(contentPadding = PaddingValues(12.dp), elevation = 0.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(user.fullName, style = MaterialTheme.typography.titleSmall)
-                        Text(user.employeeId)
-                        Text("Статус: ${statusTitle(user.registrationStatus)}")
+                        Text(user.employeeId, style = MaterialTheme.typography.bodySmall)
+                        Text("Статус: ${statusTitle(user.registrationStatus)}", style = MaterialTheme.typography.bodySmall)
                         Button(
                             onClick = vm::assignFoundUser,
                             enabled = !vm.lookupLoading,
@@ -314,10 +343,52 @@ private fun AddEmployeePanel(vm: AdminVm) {
 }
 
 @Composable
-private fun MetricColumn(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
-        Text(value, style = MaterialTheme.typography.headlineSmall)
-        Text(label, style = MaterialTheme.typography.labelSmall)
+private fun EmployeeRankRow(
+    place: Int,
+    employee: EmployeeSummary,
+    onClick: () -> Unit,
+    onGoalClick: () -> Unit
+) {
+    GlassSurface(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        contentPadding = PaddingValues(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+                if (place <= 3) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        null,
+                        tint = when (place) {
+                            1 -> MaterialTheme.colorScheme.tertiary
+                            2 -> MaterialTheme.colorScheme.outline
+                            else -> MaterialTheme.colorScheme.secondary
+                        }
+                    )
+                } else {
+                    Text("$place", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(employee.user.fullName, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Сегодня: ${employee.todayCount} · Период: ${employee.monthCount} · ${formatAdminPoints(employee.monthPoints)} б. · %,.0f ₽".format(employee.monthAmount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                employee.goalProgress?.let { progress ->
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        strokeCap = StrokeCap.Round
+                    )
+                }
+            }
+            TextButton(onClick = onGoalClick) { Text("План") }
+        }
     }
 }
 
@@ -328,7 +399,7 @@ private fun statusTitle(status: RegistrationStatus): String = when (status) {
     RegistrationStatus.DEACTIVATED -> "деактивирован"
 }
 
-private fun formatPoints(value: Double): String =
+private fun formatAdminPoints(value: Double): String =
     if (value % 1.0 == 0.0) value.toInt().toString() else "%.1f".format(value)
 
 class EmployeeDetailVm : ViewModel() {
@@ -346,26 +417,43 @@ class EmployeeDetailVm : ViewModel() {
 fun EmployeeDetailScreen(employeeId: String, vm: EmployeeDetailVm = viewModel()) {
     LaunchedEffect(employeeId) { vm.load(employeeId) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Продажи сотрудника") }) }) { pad ->
-        if (vm.loading) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            return@Scaffold
-        }
-        LazyColumn(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (vm.sales.isEmpty()) item { Text("Продаж за период нет") }
-            items(vm.sales) { sale ->
-                Card {
-                    ListItem(
-                        headlineContent = { Text(sale.displayTitle()) },
-                        supportingContent = {
-                            Column {
-                                Text("Клиент: ${sale.clientLast4}")
-                                sale.createdAt?.let { Text(it.take(16).replace("T", " ")) }
-                                sale.comment?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    GlassTopBar(title = "Карточка сотрудника", subtitle = "Продажи и история за период")
+                }
+            }
+        ) { pad ->
+            if (vm.loading) {
+                Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                return@Scaffold
+            }
+            LazyColumn(
+                Modifier.padding(pad).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                if (vm.sales.isEmpty()) {
+                    item {
+                        GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+                            Text("Продаж за период нет")
+                        }
+                    }
+                }
+                items(vm.sales) { sale ->
+                    GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(sale.displayTitle(), style = MaterialTheme.typography.titleSmall)
+                                sale.amount?.let { Text("%,.0f ₽".format(it), color = MaterialTheme.colorScheme.primary) }
                             }
-                        },
-                        trailingContent = { sale.amount?.let { Text("%,.0f ₽".format(it)) } }
-                    )
+                            Text("Клиент: ${sale.clientLast4}", style = MaterialTheme.typography.bodySmall)
+                            sale.createdAt?.let { Text(it.take(16).replace("T", " "), style = MaterialTheme.typography.bodySmall) }
+                            sale.comment?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                    }
                 }
             }
         }

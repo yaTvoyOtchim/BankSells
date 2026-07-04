@@ -3,6 +3,8 @@ package com.bank.salestracker.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.BarChart
@@ -14,7 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,6 +29,7 @@ import com.bank.salestracker.data.model.canCreateSales
 import com.bank.salestracker.data.model.isManager
 import com.bank.salestracker.di.ServiceLocator
 import com.bank.salestracker.ui.screens.*
+import com.bank.salestracker.ui.theme.GlassSurface
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector? = null) {
     data object Login : Dest("login", "Вход")
@@ -78,20 +83,30 @@ fun AppNavHost() {
 
     Scaffold(
         bottomBar = {
-            if (showBar) NavigationBar {
-                tabs.forEach { dest ->
-                    NavigationBarItem(
-                        selected = currentRoute == dest.route,
-                        onClick = {
-                            nav.navigate(dest.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+            if (showBar) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    GlassSurface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        contentPadding = PaddingValues(horizontal = 4.dp)
+                    ) {
+                        NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
+                            tabs.forEach { dest ->
+                                NavigationBarItem(
+                                    selected = currentRoute == dest.route,
+                                    onClick = {
+                                        nav.navigate(dest.route) {
+                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = { dest.icon?.let { Icon(it, dest.label) } },
+                                    label = { Text(dest.label) }
+                                )
                             }
-                        },
-                        icon = { dest.icon?.let { Icon(it, dest.label) } },
-                        label = { Text(dest.label) }
-                    )
+                        }
+                    }
                 }
             }
         }

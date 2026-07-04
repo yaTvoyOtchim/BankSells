@@ -3,7 +3,6 @@
 package com.bank.salestracker.ui.screens
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +23,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bank.salestracker.data.model.MyReport
 import com.bank.salestracker.di.ServiceLocator
+import com.bank.salestracker.ui.theme.AppBackground
+import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.GlassTopBar
+import com.bank.salestracker.ui.theme.MetricGlassCard
+import com.bank.salestracker.ui.theme.Ocean
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -61,107 +65,106 @@ fun DashboardScreen(
     val pending by vm.pendingCount.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(user?.fullName ?: "", style = MaterialTheme.typography.titleMedium)
-                        Text(user?.branch ?: "", style = MaterialTheme.typography.bodySmall)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch { ServiceLocator.authRepo.logout(); onLogout() }
-                    }) { Icon(Icons.AutoMirrored.Filled.Logout, "Выйти") }
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    GlassTopBar(
+                        title = user?.fullName ?: "",
+                        subtitle = user?.branch ?: "",
+                        trailing = {
+                            IconButton(onClick = {
+                                scope.launch { ServiceLocator.authRepo.logout(); onLogout() }
+                            }) { Icon(Icons.AutoMirrored.Filled.Logout, "Выйти") }
+                        }
+                    )
                 }
-            )
-        },
-        floatingActionButton = {
-            if (canCreateSales) {
-                ExtendedFloatingActionButton(onClick = onAddSale) {
-                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Продажа")
-                }
-            }
-        }
-    ) { pad ->
-        Column(
-            Modifier.padding(pad).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (pending > 0) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CloudOff, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("$pending продаж(и) ждут отправки — нет связи с сервером")
+            },
+            floatingActionButton = {
+                if (canCreateSales) {
+                    ExtendedFloatingActionButton(
+                        onClick = onAddSale,
+                        containerColor = Ocean,
+                        contentColor = Color.White,
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Продажа")
                     }
                 }
             }
-
-            when {
-                vm.loading -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                vm.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text(vm.error!!)
-                    TextButton(onClick = vm::refresh) { Text("Повторить") }
-                }
-                else -> vm.report?.let { r ->
-                    // Hero-карточка с градиентом: главное число дня
-                    Card(shape = MaterialTheme.shapes.large) {
-                        Column(
-                            Modifier.background(com.bank.salestracker.ui.theme.HeroGradient)
-                                .fillMaxWidth().padding(20.dp)
-                        ) {
-                            Text("СЕГОДНЯ", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
-                            Text("${r.todayCount}", style = MaterialTheme.typography.displayMedium, color = Color.White)
-                            Text("продаж на ${money.format(r.todayAmount)} · ${formatPoints(r.todayPoints)} б.", color = Color.White.copy(alpha = .9f))
-                            Spacer(Modifier.height(16.dp))
-                            Row {
-                                Column(Modifier.weight(1f)) {
-                                    Text("ЗА МЕСЯЦ", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
-                                    Text("${r.monthCount}", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Text("СУММА", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
-                                    Text(money.format(r.monthAmount), style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Text("БАЛЛЫ", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
-                                    Text(formatPoints(r.monthPoints), style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                                }
-                            }
+        ) { pad ->
+            Column(
+                Modifier.padding(pad).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (pending > 0) {
+                    GlassSurface(contentPadding = PaddingValues(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.width(8.dp))
+                            Text("$pending продаж(и) ждут отправки — нет связи с сервером")
                         }
                     }
+                }
 
-                    r.monthlyGoal?.let { goal ->
-                        val progress = (r.monthCount.toFloat() / goal).coerceIn(0f, 1f)
-                        Card {
-                            Column(Modifier.padding(16.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("План на месяц", style = MaterialTheme.typography.titleSmall)
-                                    Text("${r.monthCount} / $goal")
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.fillMaxWidth().height(10.dp),
-                                    strokeCap = StrokeCap.Round
+                when {
+                    vm.loading -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    vm.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text(vm.error!!)
+                        TextButton(onClick = vm::refresh) { Text("Повторить") }
+                    }
+                    else -> vm.report?.let { r ->
+                        GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp)) {
+                            Column {
+                                Text("СЕГОДНЯ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${r.todayCount}", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    "продаж на ${money.format(r.todayAmount)} · ${formatPoints(r.todayPoints)} б.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (progress >= 1f) {
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("План выполнен 🎉", color = MaterialTheme.colorScheme.secondary)
+                                Spacer(Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    MetricGlassCard("${r.monthCount}", "за месяц", Modifier.weight(1f))
+                                    MetricGlassCard(money.format(r.monthAmount), "сумма", Modifier.weight(1f))
+                                    MetricGlassCard(formatPoints(r.monthPoints), "баллы", Modifier.weight(1f), accent = MaterialTheme.colorScheme.secondary)
                                 }
                             }
                         }
-                    }
 
-                    Card {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("Динамика за 14 дней", style = MaterialTheme.typography.titleSmall)
-                            Spacer(Modifier.height(12.dp))
-                            MiniBarChart(r.last14Days.map { it.count })
+                        r.monthlyGoal?.let { goal ->
+                            val progress = (r.monthCount.toFloat() / goal).coerceIn(0f, 1f)
+                            GlassSurface(contentPadding = PaddingValues(16.dp)) {
+                                Column {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("План на месяц", style = MaterialTheme.typography.titleSmall)
+                                        Text("${r.monthCount} / $goal")
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    LinearProgressIndicator(
+                                        progress = { progress },
+                                        modifier = Modifier.fillMaxWidth().height(10.dp),
+                                        strokeCap = StrokeCap.Round
+                                    )
+                                    if (progress >= 1f) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text("План выполнен", color = MaterialTheme.colorScheme.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        GlassSurface(contentPadding = PaddingValues(16.dp)) {
+                            Column {
+                                Text("Динамика за 14 дней", style = MaterialTheme.typography.titleSmall)
+                                Spacer(Modifier.height(12.dp))
+                                MiniBarChart(r.last14Days.map { it.count })
+                            }
                         }
                     }
                 }

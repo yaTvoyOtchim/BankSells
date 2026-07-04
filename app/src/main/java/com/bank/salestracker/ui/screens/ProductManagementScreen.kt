@@ -2,7 +2,15 @@
 
 package com.bank.salestracker.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -10,10 +18,29 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -24,6 +51,9 @@ import com.bank.salestracker.data.model.ProductSetting
 import com.bank.salestracker.data.model.ProductSettingPatch
 import com.bank.salestracker.data.model.Role
 import com.bank.salestracker.di.ServiceLocator
+import com.bank.salestracker.ui.theme.AppBackground
+import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.GlassTopBar
 import kotlinx.coroutines.launch
 
 class ProductManagementVm : ViewModel() {
@@ -121,52 +151,64 @@ fun ProductManagementScreen(vm: ProductManagementVm = viewModel()) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Продукты офиса") },
-                actions = {
-                    if (user?.role == Role.ADMIN) {
-                        IconButton(onClick = { createDialog = true }) {
-                            Icon(Icons.Default.Add, "Добавить продукт")
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    GlassTopBar(
+                        title = "Продукты офиса",
+                        subtitle = "Активность, баллы и правила учета",
+                        trailing = {
+                            if (user?.role == Role.ADMIN) {
+                                IconButton(onClick = { createDialog = true }) {
+                                    Icon(Icons.Default.Add, "Добавить продукт")
+                                }
+                            }
+                        }
+                    )
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbar) }
+        ) { pad ->
+            LazyColumn(
+                Modifier.padding(pad).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                item {
+                    GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
+                        OutlinedTextField(
+                            value = vm.query,
+                            onValueChange = { vm.query = it },
+                            label = { Text("Поиск продукта") },
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                if (vm.loading) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
                     }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) }
-    ) { pad ->
-        LazyColumn(
-            Modifier.padding(pad).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            item {
-                OutlinedTextField(
-                    value = vm.query,
-                    onValueChange = { vm.query = it },
-                    label = { Text("Поиск продукта") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            if (vm.loading) {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                } else if (filtered.isEmpty()) {
+                    item {
+                        GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+                            Text("Продукты не найдены", color = MaterialTheme.colorScheme.outline)
+                        }
                     }
-                }
-            } else if (filtered.isEmpty()) {
-                item { Text("Продукты не найдены", color = MaterialTheme.colorScheme.outline) }
-            } else {
-                items(filtered, key = { it.productId }) { product ->
-                    ProductSettingCard(
-                        product = product,
-                        saving = vm.savingProductId == product.productId,
-                        onSave = vm::updateProduct
-                    )
+                } else {
+                    items(filtered, key = { it.productId }) { product ->
+                        ProductSettingCard(
+                            product = product,
+                            saving = vm.savingProductId == product.productId,
+                            onSave = vm::updateProduct
+                        )
+                    }
                 }
             }
         }
@@ -192,15 +234,23 @@ private fun ProductSettingCard(
     var active by remember(product.productId, product.active) { mutableStateOf(product.active) }
     var requiresAmount by remember(product.productId, product.requiresAmount) { mutableStateOf(product.requiresAmount) }
     var countsTowardPlan by remember(product.productId, product.countsTowardPlan) { mutableStateOf(product.countsTowardPlan) }
-    var pointsText by remember(product.productId, product.points) { mutableStateOf(formatPoints(product.points)) }
+    var pointsText by remember(product.productId, product.points) { mutableStateOf(formatProductPoints(product.points)) }
     val points = pointsText.replace(",", ".").toDoubleOrNull()
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+    GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text(product.title, style = MaterialTheme.typography.titleMedium)
-                    Text("${product.groupName.ifBlank { "Без группы" }} · ${product.code}", style = MaterialTheme.typography.bodySmall)
+                    Text(product.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${product.groupName.ifBlank { "Без группы" }} · ${product.code}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Switch(checked = active, onCheckedChange = { active = it })
             }
@@ -215,15 +265,8 @@ private fun ProductSettingCard(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Требует сумму")
-                Switch(checked = requiresAmount, onCheckedChange = { requiresAmount = it })
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Учитывать в плане")
-                Switch(checked = countsTowardPlan, onCheckedChange = { countsTowardPlan = it })
-            }
+            ProductSwitchRow("Требует сумму", requiresAmount) { requiresAmount = it }
+            ProductSwitchRow("Учитывать в плане", countsTowardPlan) { countsTowardPlan = it }
 
             Button(
                 onClick = { points?.let { onSave(product, it, active, requiresAmount, countsTowardPlan) } },
@@ -235,6 +278,18 @@ private fun ProductSettingCard(
                 Text(if (saving) "Сохранение..." else "Сохранить")
             }
         }
+    }
+}
+
+@Composable
+private fun ProductSwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -279,5 +334,5 @@ private fun CreateProductDialog(onDismiss: () -> Unit, onCreate: (String, String
     )
 }
 
-private fun formatPoints(value: Double): String =
+private fun formatProductPoints(value: Double): String =
     if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()

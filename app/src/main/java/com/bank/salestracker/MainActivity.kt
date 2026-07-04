@@ -1,12 +1,15 @@
 package com.bank.salestracker
 
 import android.app.Application
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import com.bank.salestracker.di.ServiceLocator
 import com.bank.salestracker.ui.navigation.AppNavHost
@@ -19,6 +22,7 @@ class App : Application() {
     }
 }
 
+@Suppress("DEPRECATION")
 class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,6 +30,18 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             BankTheme {
+                val darkTheme = isSystemInDarkTheme()
+
+                DisposableEffect(darkTheme) {
+                    window.statusBarColor = Color.TRANSPARENT
+                    window.navigationBarColor = Color.TRANSPARENT
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                    onDispose {}
+                }
+
                 var unlocked by remember {
                     // Биометрия нужна только если уже есть активная сессия
                     mutableStateOf(!ServiceLocator.tokenStore.isLoggedIn)

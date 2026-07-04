@@ -3,13 +3,35 @@
 package com.bank.salestracker.ui.screens
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -22,6 +44,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bank.salestracker.R
 import com.bank.salestracker.di.ServiceLocator
+import com.bank.salestracker.ui.theme.AppBackground
+import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.GradientActionButton
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
@@ -46,7 +71,7 @@ class LoginVm : ViewModel() {
             } catch (e: HttpException) {
                 error = when (e.code()) {
                     401 -> "Неверный табельный номер или пароль"
-                    423 -> "Учётная запись заблокирована"
+                    423 -> "Учетная запись заблокирована"
                     else -> "Ошибка сервера (${e.code()})"
                 }
             } catch (e: IOException) {
@@ -66,61 +91,75 @@ fun LoginScreen(
 ) {
     var showPassword by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Image(
-            painter = painterResource(R.drawable.vtb_logo),
-            contentDescription = null,
-            modifier = Modifier.size(88.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("ВТБ Продажи", style = MaterialTheme.typography.headlineMedium)
-        Text("Учёт продаж для сотрудников", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = vm.employeeId,
-            onValueChange = { vm.employeeId = it },
-            label = { Text("Табельный номер") },
-            placeholder = { Text("vtb70336144") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.password,
-            onValueChange = { vm.password = it },
-            label = { Text("Пароль") },
-            singleLine = true,
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { showPassword = !showPassword }) {
-                    Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        vm.error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
-
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = { vm.login(onLoggedIn) },
-            enabled = !vm.loading,
-            modifier = Modifier.fillMaxWidth().height(52.dp)
+    AppBackground {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
         ) {
-            if (vm.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-            else Text("Войти")
-        }
-        TextButton(onClick = onRegisterClick, enabled = !vm.loading) {
-            Text("Зарегистрироваться")
+            GlassSurface(
+                Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(22.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.vtb_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(82.dp)
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("ВТБ Продажи", style = MaterialTheme.typography.headlineMedium)
+                        Text(
+                            "Учет продаж для сотрудников",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = vm.employeeId,
+                        onValueChange = { vm.employeeId = it },
+                        label = { Text("Табельный номер") },
+                        placeholder = { Text("vtb70336144") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.password,
+                        onValueChange = { vm.password = it },
+                        label = { Text("Пароль") },
+                        singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    vm.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    GradientActionButton(
+                        text = if (vm.loading) "Вход..." else "Войти",
+                        onClick = { vm.login(onLoggedIn) },
+                        enabled = !vm.loading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                    TextButton(onClick = onRegisterClick, enabled = !vm.loading) {
+                        Text("Зарегистрироваться")
+                    }
+                }
+            }
         }
     }
 }
@@ -181,65 +220,73 @@ fun RegisterScreen(
     onBack: () -> Unit,
     vm: RegisterVm = viewModel()
 ) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Регистрация", style = MaterialTheme.typography.headlineMedium)
-        Text("Введите свой табельный номер ВТБ и придумайте пароль", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = vm.employeeId,
-            onValueChange = { vm.employeeId = it },
-            label = { Text("Табельный номер") },
-            placeholder = { Text("vtb70336144") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.fullName,
-            onValueChange = { vm.fullName = it },
-            label = { Text("ФИО") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.password,
-            onValueChange = { vm.password = it },
-            label = { Text("Пароль") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.repeatPassword,
-            onValueChange = { vm.repeatPassword = it },
-            label = { Text("Повторите пароль") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        vm.error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
-
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = { vm.register(onRegistered) },
-            enabled = !vm.loading,
-            modifier = Modifier.fillMaxWidth().height(52.dp)
+    AppBackground {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(if (vm.loading) "Создание..." else "Создать профиль")
-        }
-        TextButton(onClick = onBack, enabled = !vm.loading, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Назад ко входу")
+            GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(22.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Регистрация", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        "Введите свой табельный номер ВТБ и придумайте пароль",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = vm.employeeId,
+                        onValueChange = { vm.employeeId = it },
+                        label = { Text("Табельный номер") },
+                        placeholder = { Text("vtb70336144") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.fullName,
+                        onValueChange = { vm.fullName = it },
+                        label = { Text("ФИО") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.password,
+                        onValueChange = { vm.password = it },
+                        label = { Text("Пароль") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.repeatPassword,
+                        onValueChange = { vm.repeatPassword = it },
+                        label = { Text("Повторите пароль") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    vm.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    GradientActionButton(
+                        text = if (vm.loading) "Создание..." else "Создать профиль",
+                        onClick = { vm.register(onRegistered) },
+                        enabled = !vm.loading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    )
+                    TextButton(onClick = onBack, enabled = !vm.loading, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        Text("Назад ко входу")
+                    }
+                }
+            }
         }
     }
 }
@@ -283,43 +330,63 @@ class ChangePasswordVm : ViewModel() {
 
 @Composable
 fun ChangePasswordScreen(onDone: () -> Unit, vm: ChangePasswordVm = viewModel()) {
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-        Text("Смена временного пароля", style = MaterialTheme.typography.headlineSmall)
-        Text("При первом входе нужно задать свой пароль", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = vm.oldPass,
-            onValueChange = { vm.oldPass = it },
-            label = { Text("Текущий пароль") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.newPass,
-            onValueChange = { vm.newPass = it },
-            label = { Text("Новый пароль") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = vm.repeat,
-            onValueChange = { vm.repeat = it },
-            label = { Text("Повторите пароль") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        vm.error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = { vm.submit(onDone) }, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text(if (vm.loading) "Сохранение..." else "Сохранить")
+    AppBackground {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            GlassSurface(Modifier.fillMaxWidth(), contentPadding = PaddingValues(22.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Смена временного пароля", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "При первом входе нужно задать свой пароль",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = vm.oldPass,
+                        onValueChange = { vm.oldPass = it },
+                        label = { Text("Текущий пароль") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.newPass,
+                        onValueChange = { vm.newPass = it },
+                        label = { Text("Новый пароль") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = vm.repeat,
+                        onValueChange = { vm.repeat = it },
+                        label = { Text("Повторите пароль") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    vm.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = { vm.submit(onDone) },
+                        enabled = !vm.loading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    ) {
+                        if (vm.loading) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Сохранить")
+                        }
+                    }
+                }
+            }
         }
     }
 }
