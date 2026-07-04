@@ -1,37 +1,47 @@
 package com.bank.salestracker.ui.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SupervisorAccount
-import androidx.compose.material3.*
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -47,9 +57,19 @@ import com.bank.salestracker.data.model.RegistrationStatus
 import com.bank.salestracker.data.model.canCreateSales
 import com.bank.salestracker.data.model.isManager
 import com.bank.salestracker.di.ServiceLocator
-import com.bank.salestracker.ui.screens.*
-import com.bank.salestracker.ui.theme.GlassSurface
-import com.bank.salestracker.ui.theme.HeroGradient
+import com.bank.salestracker.ui.screens.AddSaleBottomSheet
+import com.bank.salestracker.ui.screens.AddSaleScreen
+import com.bank.salestracker.ui.screens.AdminScreen
+import com.bank.salestracker.ui.screens.ChangePasswordScreen
+import com.bank.salestracker.ui.screens.DashboardScreen
+import com.bank.salestracker.ui.screens.EmployeeDetailScreen
+import com.bank.salestracker.ui.screens.EmployeeRatingScreen
+import com.bank.salestracker.ui.screens.LoginScreen
+import com.bank.salestracker.ui.screens.ProductManagementScreen
+import com.bank.salestracker.ui.screens.ProfileScreen
+import com.bank.salestracker.ui.screens.RegisterScreen
+import com.bank.salestracker.ui.screens.ReportsScreen
+import com.bank.salestracker.ui.screens.WaitingScreen
 import com.bank.salestracker.ui.theme.appBackgroundBrush
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector? = null) {
@@ -58,17 +78,23 @@ sealed class Dest(val route: String, val label: String, val icon: ImageVector? =
     data object Waiting : Dest("waiting", "Ожидание")
     data object ChangePassword : Dest("change_password", "Смена пароля")
     data object Home : Dest("home", "Главная", Icons.Default.Home)
-    data object AddSale : Dest("add_sale", "Продажа", Icons.Default.AddCircle)
-    data object Reports : Dest("reports", "Отчёты", Icons.Default.BarChart)
-    data object Admin : Dest("admin", "Команда", Icons.Default.SupervisorAccount)
+    data object AddSale : Dest("add_sale", "Продажа", Icons.Default.Add)
+    data object Reports : Dest("reports", "Отчёты", Icons.Default.Description)
+    data object Rating : Dest("rating", "Рейтинг", Icons.Default.EmojiEvents)
+    data object Profile : Dest("profile", "Профиль", Icons.Default.Person)
+    data object Admin : Dest("admin", "Команда", Icons.Default.EmojiEvents)
     data object Products : Dest("products", "Продукты", Icons.Default.Settings)
     data object EmployeeDetail : Dest("employee/{id}", "Сотрудник")
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavHost() {
     val nav = rememberNavController()
     val auth = ServiceLocator.authRepo
+    var showAddSheet by remember { mutableStateOf(false) }
+    var addSheetSession by remember { mutableStateOf(0) }
+    val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val currentUser = auth.currentUser()
     val start = when {
         !auth.isLoggedIn -> Dest.Login.route
@@ -83,16 +109,16 @@ fun AppNavHost() {
     val isManager = activeUser?.role?.isManager() == true
     val canCreateSales = activeUser?.role?.canCreateSales() == true
 
-    val tabs = buildList {
+    val menuRoutes = buildList {
         if (canWork) {
             add(Dest.Home)
-            if (canCreateSales) add(Dest.AddSale)
             add(Dest.Reports)
-            if (isManager) add(Dest.Admin)
+            add(Dest.Rating)
+            add(Dest.Profile)
             if (isManager) add(Dest.Products)
         }
     }
-    val showBar = currentRoute in tabs.map { it.route }
+    val showBar = currentRoute in menuRoutes.map { it.route }
 
     fun routeAfterAuth(mustChangePassword: Boolean): String {
         val user = auth.currentUser()
@@ -103,24 +129,28 @@ fun AppNavHost() {
         }
     }
 
-    Scaffold(
+    androidx.compose.material3.Scaffold(
         modifier = Modifier.background(appBackgroundBrush()),
         containerColor = Color.Transparent,
         bottomBar = {
             if (showBar) {
                 VtbBottomMenu(
-                    tabs = tabs,
                     currentRoute = currentRoute,
+                    canAddSale = canCreateSales,
                     onNavigate = { dest ->
                         if (currentRoute == dest.route) return@VtbBottomMenu
-                        if (dest == Dest.AddSale) {
-                            nav.navigate(dest.route) { launchSingleTop = true }
-                        } else {
-                            nav.navigate(dest.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                        nav.navigate(dest.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onAddClick = {
+                        if (canCreateSales) {
+                            addSheetSession += 1
+                            showAddSheet = true
+                        } else if (isManager) {
+                            nav.navigate(Dest.Products.route) { launchSingleTop = true }
                         }
                     }
                 )
@@ -187,6 +217,25 @@ fun AppNavHost() {
                 }
             }
             composable(Dest.Reports.route) { ReportsScreen() }
+            composable(Dest.Rating.route) {
+                if (isManager) {
+                    AdminScreen(
+                        onEmployeeClick = { id -> nav.navigate("employee/$id") },
+                        onProductsClick = { nav.navigate(Dest.Products.route) }
+                    )
+                } else {
+                    EmployeeRatingScreen()
+                }
+            }
+            composable(Dest.Profile.route) {
+                ProfileScreen(
+                    onLogout = {
+                        nav.navigate(Dest.Login.route) { popUpTo(0) }
+                    },
+                    onProductsClick = { nav.navigate(Dest.Products.route) },
+                    canManageProducts = isManager
+                )
+            }
             composable(Dest.Admin.route) {
                 AdminScreen(
                     onEmployeeClick = { id -> nav.navigate("employee/$id") },
@@ -199,51 +248,138 @@ fun AppNavHost() {
             }
         }
     }
+
+    if (showAddSheet && canCreateSales) {
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            sheetState = addSheetState,
+            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            containerColor = if (isSystemInDarkTheme()) Color(0xFF141A2B) else Color(0xFFF7F7FC),
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            AddSaleBottomSheet(
+                sessionKey = addSheetSession,
+                onDismiss = { showAddSheet = false },
+                onSaved = {
+                    showAddSheet = false
+                    val homeHandle = runCatching {
+                        nav.getBackStackEntry(Dest.Home.route).savedStateHandle
+                    }.getOrNull()
+                    homeHandle?.let(SalesRefreshSignal::markChanged)
+                    nav.navigate(Dest.Home.route) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Composable
 private fun VtbBottomMenu(
-    tabs: List<Dest>,
     currentRoute: String?,
-    onNavigate: (Dest) -> Unit
+    canAddSale: Boolean,
+    onNavigate: (Dest) -> Unit,
+    onAddClick: () -> Unit
 ) {
+    val darkTheme = isSystemInDarkTheme()
+    val purple = Color(0xFF6246FF)
+    val inactive = if (darkTheme) Color(0xFFA7ACC3) else Color(0xFF9EA2B6)
+    val barColor = if (darkTheme) Color(0xF01A2134) else Color(0xFFFDFDFF)
+    val borderColor = if (darkTheme) Color.White.copy(alpha = 0.12f) else Color(0xFFE5E8F4)
+
     Box(
         Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .height(92.dp)
     ) {
-        GlassSurface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(34.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            elevation = if (isSystemInDarkTheme()) 0.dp else 18.dp
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(76.dp)
+                .border(1.dp, borderColor, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = barColor,
+            shadowElevation = if (darkTheme) 0.dp else 20.dp,
+            tonalElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp),
+                    .height(76.dp)
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                tabs.forEach { dest ->
-                    val selected = currentRoute == dest.route
-                    if (dest == Dest.AddSale) {
-                        AddMenuItem(
-                            selected = selected,
-                            onClick = { onNavigate(dest) },
-                            modifier = Modifier.weight(1.18f)
-                        )
-                    } else {
-                        BottomMenuItem(
-                            label = dest.label,
-                            icon = dest.icon,
-                            selected = selected,
-                            onClick = { onNavigate(dest) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                BottomMenuItem(
+                    label = "Главная",
+                    icon = Icons.Default.Home,
+                    selected = currentRoute == Dest.Home.route,
+                    activeColor = purple,
+                    inactiveColor = inactive,
+                    onClick = { onNavigate(Dest.Home) },
+                    modifier = Modifier.weight(1f)
+                )
+                BottomMenuItem(
+                    label = "Отчёт",
+                    icon = Icons.Default.Description,
+                    selected = currentRoute == Dest.Reports.route,
+                    activeColor = purple,
+                    inactiveColor = inactive,
+                    onClick = { onNavigate(Dest.Reports) },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.weight(1f))
+                BottomMenuItem(
+                    label = "Рейтинг",
+                    icon = Icons.Default.EmojiEvents,
+                    selected = currentRoute == Dest.Rating.route,
+                    activeColor = purple,
+                    inactiveColor = inactive,
+                    onClick = { onNavigate(Dest.Rating) },
+                    modifier = Modifier.weight(1f)
+                )
+                BottomMenuItem(
+                    label = "Профиль",
+                    icon = Icons.Default.Person,
+                    selected = currentRoute == Dest.Profile.route,
+                    activeColor = purple,
+                    inactiveColor = inactive,
+                    onClick = { onNavigate(Dest.Profile) },
+                    modifier = Modifier.weight(1f)
+                )
             }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-2).dp)
+                .size(64.dp)
+                .shadow(
+                    elevation = if (darkTheme) 0.dp else 22.dp,
+                    shape = RoundedCornerShape(18.dp),
+                    ambientColor = purple.copy(alpha = 0.34f),
+                    spotColor = purple.copy(alpha = 0.34f)
+                )
+                .clip(RoundedCornerShape(18.dp))
+                .background(if (canAddSale) purple else inactive.copy(alpha = 0.62f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onAddClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Add,
+                if (canAddSale) "Новая продажа" else "Добавить",
+                tint = Color.White,
+                modifier = Modifier.size(34.dp)
+            )
         }
     }
 }
@@ -251,111 +387,39 @@ private fun VtbBottomMenu(
 @Composable
 private fun BottomMenuItem(
     label: String,
-    icon: ImageVector?,
+    icon: ImageVector,
     selected: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    val itemBrush = if (selected) {
-        Brush.verticalGradient(
-            listOf(
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.46f)
-            )
-        )
-    } else {
-        Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-    }
+    val color = if (selected) activeColor else inactiveColor
     Column(
         modifier = modifier
-            .height(62.dp)
-            .padding(horizontal = 3.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(itemBrush)
+            .height(58.dp)
+            .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (icon != null) {
-            Icon(icon, label, tint = color, modifier = Modifier.size(24.dp))
-        }
+        Icon(icon, label, tint = color, modifier = Modifier.size(23.dp))
         Text(
             text = label,
             color = color,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
+            fontSize = 11.sp,
+            lineHeight = 13.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
             modifier = Modifier
-                .padding(top = 4.dp)
+                .padding(top = 3.dp)
                 .fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun AddMenuItem(
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val darkTheme = isSystemInDarkTheme()
-    val shadowColor = if (darkTheme) Color.Transparent else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-    val brush = if (selected) {
-        HeroGradient
-    } else {
-        Brush.linearGradient(
-            listOf(
-                MaterialTheme.colorScheme.primary,
-                Color(0xFF00B7D8)
-            )
-        )
-    }
-    Column(
-        modifier = modifier
-            .height(68.dp)
-            .padding(horizontal = 4.dp)
-            .shadow(
-                elevation = if (darkTheme) 0.dp else 16.dp,
-                shape = RoundedCornerShape(25.dp),
-                ambientColor = shadowColor,
-                spotColor = shadowColor
-            )
-            .clip(RoundedCornerShape(25.dp))
-            .background(brush)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            Icons.Default.AddCircle,
-            "Добавить продажу",
-            tint = Color.White,
-            modifier = Modifier.size(26.dp)
-        )
-        Text(
-            text = "Продажа",
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
-            maxLines = 1,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .widthIn(max = 82.dp)
         )
     }
 }
