@@ -11,5 +11,6 @@ local.properties
 *.sqlite
 *.sqlite3
 app-launch-check.png
+.superpowers/
 __pycache__/
 server/__pycache__/
