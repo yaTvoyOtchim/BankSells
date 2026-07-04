@@ -1,0 +1,15 @@
+.gradle/
+.idea/
+.kotlin/
+.venv/
+build/
+app/build/
+local.properties
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+app-launch-check.png
+__pycache__/
+server/__pycache__/
