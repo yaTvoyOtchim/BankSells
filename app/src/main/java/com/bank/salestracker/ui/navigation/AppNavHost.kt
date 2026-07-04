@@ -1,11 +1,21 @@
 package com.bank.salestracker.ui.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.BarChart
@@ -16,11 +26,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -32,6 +49,7 @@ import com.bank.salestracker.data.model.isManager
 import com.bank.salestracker.di.ServiceLocator
 import com.bank.salestracker.ui.screens.*
 import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.HeroGradient
 import com.bank.salestracker.ui.theme.appBackgroundBrush
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector? = null) {
@@ -71,6 +89,7 @@ fun AppNavHost() {
             if (canCreateSales) add(Dest.AddSale)
             add(Dest.Reports)
             if (isManager) add(Dest.Admin)
+            if (isManager) add(Dest.Products)
         }
     }
     val showBar = currentRoute in tabs.map { it.route }
@@ -89,38 +108,22 @@ fun AppNavHost() {
         containerColor = Color.Transparent,
         bottomBar = {
             if (showBar) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    GlassSurface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 3.dp),
-                        elevation = 12.dp
-                    ) {
-                        NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
-                            tabs.forEach { dest ->
-                                NavigationBarItem(
-                                    selected = currentRoute == dest.route,
-                                    onClick = {
-                                        nav.navigate(dest.route) {
-                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = { dest.icon?.let { Icon(it, dest.label) } },
-                                    label = { Text(dest.label) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.76f),
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
+                VtbBottomMenu(
+                    tabs = tabs,
+                    currentRoute = currentRoute,
+                    onNavigate = { dest ->
+                        if (currentRoute == dest.route) return@VtbBottomMenu
+                        if (dest == Dest.AddSale) {
+                            nav.navigate(dest.route) { launchSingleTop = true }
+                        } else {
+                            nav.navigate(dest.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
                     }
-                }
+                )
             }
         }
     ) { padding ->
@@ -162,11 +165,9 @@ fun AppNavHost() {
                     .getStateFlow(SalesRefreshSignal.KEY, 0L)
                     .collectAsState()
                 DashboardScreen(
-                    onAddSale = { nav.navigate(Dest.AddSale.route) },
                     onLogout = {
                         nav.navigate(Dest.Login.route) { popUpTo(0) }
                     },
-                    canCreateSales = canCreateSales,
                     refreshSignal = salesChangedAt
                 )
             }
@@ -197,5 +198,164 @@ fun AppNavHost() {
                 EmployeeDetailScreen(employeeId = entry.arguments?.getString("id") ?: "")
             }
         }
+    }
+}
+
+@Composable
+private fun VtbBottomMenu(
+    tabs: List<Dest>,
+    currentRoute: String?,
+    onNavigate: (Dest) -> Unit
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        GlassSurface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(34.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            elevation = if (isSystemInDarkTheme()) 0.dp else 18.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEach { dest ->
+                    val selected = currentRoute == dest.route
+                    if (dest == Dest.AddSale) {
+                        AddMenuItem(
+                            selected = selected,
+                            onClick = { onNavigate(dest) },
+                            modifier = Modifier.weight(1.18f)
+                        )
+                    } else {
+                        BottomMenuItem(
+                            label = dest.label,
+                            icon = dest.icon,
+                            selected = selected,
+                            onClick = { onNavigate(dest) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomMenuItem(
+    label: String,
+    icon: ImageVector?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val itemBrush = if (selected) {
+        Brush.verticalGradient(
+            listOf(
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.46f)
+            )
+        )
+    } else {
+        Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
+    }
+    Column(
+        modifier = modifier
+            .height(62.dp)
+            .padding(horizontal = 3.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(itemBrush)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (icon != null) {
+            Icon(icon, label, tint = color, modifier = Modifier.size(24.dp))
+        }
+        Text(
+            text = label,
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun AddMenuItem(
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val darkTheme = isSystemInDarkTheme()
+    val shadowColor = if (darkTheme) Color.Transparent else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+    val brush = if (selected) {
+        HeroGradient
+    } else {
+        Brush.linearGradient(
+            listOf(
+                MaterialTheme.colorScheme.primary,
+                Color(0xFF00B7D8)
+            )
+        )
+    }
+    Column(
+        modifier = modifier
+            .height(68.dp)
+            .padding(horizontal = 4.dp)
+            .shadow(
+                elevation = if (darkTheme) 0.dp else 16.dp,
+                shape = RoundedCornerShape(25.dp),
+                ambientColor = shadowColor,
+                spotColor = shadowColor
+            )
+            .clip(RoundedCornerShape(25.dp))
+            .background(brush)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Default.AddCircle,
+            "Добавить продажу",
+            tint = Color.White,
+            modifier = Modifier.size(26.dp)
+        )
+        Text(
+            text = "Продажа",
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .widthIn(max = 82.dp)
+        )
     }
 }

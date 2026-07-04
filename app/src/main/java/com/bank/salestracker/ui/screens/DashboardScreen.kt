@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,7 +27,6 @@ import com.bank.salestracker.ui.theme.AppBackground
 import com.bank.salestracker.ui.theme.GlassSurface
 import com.bank.salestracker.ui.theme.GlassTopBar
 import com.bank.salestracker.ui.theme.MetricGlassCard
-import com.bank.salestracker.ui.theme.Ocean
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -57,9 +55,7 @@ private val money: NumberFormat = NumberFormat.getCurrencyInstance(Locale("ru", 
 
 @Composable
 fun DashboardScreen(
-    onAddSale: () -> Unit,
     onLogout: () -> Unit,
-    canCreateSales: Boolean = true,
     refreshSignal: Long = 0L,
     vm: DashboardVm = viewModel()
 ) {
@@ -85,18 +81,6 @@ fun DashboardScreen(
                             }) { Icon(Icons.AutoMirrored.Filled.Logout, "Выйти") }
                         }
                     )
-                }
-            },
-            floatingActionButton = {
-                if (canCreateSales) {
-                    ExtendedFloatingActionButton(
-                        onClick = onAddSale,
-                        containerColor = Ocean,
-                        contentColor = Color.White,
-                        shape = MaterialTheme.shapes.large
-                    ) {
-                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Продажа")
-                    }
                 }
             }
         ) { pad ->
