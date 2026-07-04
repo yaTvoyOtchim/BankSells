@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { stream -> load(stream) }
+    }
+}
+val apiBaseUrl = localProperties.getProperty("apiBaseUrl") ?: "http://10.0.2.2:8000/api/"
 
 android {
     namespace = "com.bank.salestracker"
@@ -17,7 +27,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         // Адрес вашего бэкенда. Для эмулятора локальный сервер = 10.0.2.2
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {
