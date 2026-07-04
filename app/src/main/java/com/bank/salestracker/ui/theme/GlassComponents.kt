@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +39,14 @@ fun appBackgroundBrush(): Brush =
     if (isSystemInDarkTheme()) {
         Brush.linearGradient(listOf(Color(0xFF020918), Color(0xFF071D4D), Color(0xFF062028)))
     } else {
-        Brush.linearGradient(listOf(Color(0xFFFFFFFF), Color(0xFFEEF6FF), Color(0xFFE9FFF9)))
+        Brush.linearGradient(
+            listOf(
+                Color(0xFFFAFCFF),
+                Color(0xFFF0F5FF),
+                Color(0xFFF7F5FF),
+                Color(0xFFEFFBFF)
+            )
+        )
     }
 
 @Composable
@@ -45,7 +54,13 @@ fun glassBrush(): Brush =
     if (isSystemInDarkTheme()) {
         Brush.linearGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.06f)))
     } else {
-        Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), Color.White.copy(alpha = 0.46f)))
+        Brush.verticalGradient(
+            listOf(
+                Color(0xFFFFFFFF).copy(alpha = 0.94f),
+                Color(0xFFF7FAFF).copy(alpha = 0.88f),
+                Color(0xFFEFF6FF).copy(alpha = 0.78f)
+            )
+        )
     }
 
 @Composable
@@ -53,7 +68,7 @@ fun glassBorder(): BorderStroke =
     if (isSystemInDarkTheme()) {
         BorderStroke(1.dp, Color.White.copy(alpha = 0.20f))
     } else {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.72f))
+        BorderStroke(1.dp, Color(0xFFD8E3F2).copy(alpha = 0.92f))
     }
 
 @Composable
@@ -66,7 +81,9 @@ fun AppBackground(
             .fillMaxSize()
             .background(appBackgroundBrush())
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            content()
+        }
     }
 }
 
@@ -75,18 +92,28 @@ fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = MaterialTheme.shapes.large,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    elevation: Dp = if (isSystemInDarkTheme()) 0.dp else 18.dp,
+    elevation: Dp = if (isSystemInDarkTheme()) 0.dp else 10.dp,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = isSystemInDarkTheme()
+    val shadowColor = if (darkTheme) Color.Transparent else Color(0xFF6684B1).copy(alpha = 0.16f)
     Box(
         modifier
-            .shadow(elevation = elevation, shape = shape, clip = false)
-            .clip(shape)
-            .background(glassBrush())
+            .shadow(
+                elevation = elevation,
+                shape = shape,
+                clip = false,
+                ambientColor = shadowColor,
+                spotColor = shadowColor
+            )
+            .background(brush = glassBrush(), shape = shape)
             .border(glassBorder(), shape)
+            .clip(shape)
             .padding(contentPadding)
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            content()
+        }
     }
 }
 
@@ -99,9 +126,9 @@ fun GlassTopBar(
 ) {
     GlassSurface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        elevation = 10.dp
+        shape = RoundedCornerShape(28.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        elevation = if (isSystemInDarkTheme()) 0.dp else 12.dp
     ) {
         Row(
             Modifier.fillMaxWidth(),
@@ -129,8 +156,9 @@ fun MetricGlassCard(
 ) {
     GlassSurface(
         modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
         contentPadding = PaddingValues(14.dp),
-        elevation = 0.dp
+        elevation = if (isSystemInDarkTheme()) 0.dp else 4.dp
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,10 +1,11 @@
 package com.bank.salestracker.ui.navigation
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.BarChart
@@ -30,6 +31,7 @@ import com.bank.salestracker.data.model.isManager
 import com.bank.salestracker.di.ServiceLocator
 import com.bank.salestracker.ui.screens.*
 import com.bank.salestracker.ui.theme.GlassSurface
+import com.bank.salestracker.ui.theme.appBackgroundBrush
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector? = null) {
     data object Login : Dest("login", "Вход")
@@ -82,13 +84,16 @@ fun AppNavHost() {
     }
 
     Scaffold(
+        modifier = Modifier.background(appBackgroundBrush()),
+        containerColor = Color.Transparent,
         bottomBar = {
             if (showBar) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                     GlassSurface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.extraLarge,
-                        contentPadding = PaddingValues(horizontal = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 3.dp),
+                        elevation = 12.dp
                     ) {
                         NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
                             tabs.forEach { dest ->
@@ -102,7 +107,14 @@ fun AppNavHost() {
                                         }
                                     },
                                     icon = { dest.icon?.let { Icon(it, dest.label) } },
-                                    label = { Text(dest.label) }
+                                    label = { Text(dest.label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.76f),
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
                             }
                         }

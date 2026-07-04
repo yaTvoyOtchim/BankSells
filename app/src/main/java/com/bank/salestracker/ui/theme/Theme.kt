@@ -23,7 +23,7 @@ val Ink = Color(0xFF101A2B)
 val Ocean = VtbBlue
 val Mint = VtbMint
 val Amber = Color(0xFFFFB547)
-val Mist = Color(0xFFEFF6FF)
+val Mist = Color(0xFFF2F7FF)
 val CardWhite = Color(0xFFFFFFFF)
 
 /* Градиент для hero-карточки дашборда и шапки логина */
@@ -32,18 +32,18 @@ val HeroGradient = Brush.linearGradient(listOf(VtbBlue, VtbCyan, VtbMint))
 private val LightColors = lightColorScheme(
     primary = Ocean,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE3EAFF),
+    primaryContainer = Color(0xFFE8EEFF),
     onPrimaryContainer = Ink,
     secondary = Mint,
     onSecondary = Ink,
-    secondaryContainer = Color(0xFFD6F7EF),
+    secondaryContainer = Color(0xFFDDF8F3),
     tertiary = Amber,
-    background = Color(0xFFF3F8FF),
-    surface = Color(0xF2FFFFFF),
-    surfaceVariant = Color(0xFFE7F0FC),
-    onSurface = Ink,
-    onSurfaceVariant = Color(0xFF5B6679),
-    outline = Color(0xFF9AA5B8),
+    background = Color(0xFFF6F9FF),
+    surface = Color(0xFFFBFCFF),
+    surfaceVariant = Color(0xFFEEF4FC),
+    onSurface = Color(0xFF111827),
+    onSurfaceVariant = Color(0xFF5F6F86),
+    outline = Color(0xFFC8D5E5),
     error = Color(0xFFE5484D)
 )
 

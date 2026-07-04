@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -208,7 +209,14 @@ fun AddSaleScreen(onSaved: () -> Unit, vm: AddSaleVm = viewModel()) {
                                     FilterChip(
                                         selected = vm.selectedProducts.any { it.productId == product.productId },
                                         onClick = { vm.toggleProduct(product) },
-                                        label = { Text(product.title) }
+                                        label = { Text(product.title) },
+                                        shape = MaterialTheme.shapes.medium,
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                        )
                                     )
                                 }
                             }
@@ -283,7 +291,7 @@ private fun SummaryPill(value: String, label: String, modifier: Modifier = Modif
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f)
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)

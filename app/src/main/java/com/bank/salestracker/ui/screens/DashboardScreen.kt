@@ -180,15 +180,24 @@ private fun formatPoints(value: Double): String =
 fun MiniBarChart(values: List<Int>, modifier: Modifier = Modifier, barColor: Color = MaterialTheme.colorScheme.primary) {
     if (values.isEmpty()) { Text("Нет данных"); return }
     val max = (values.maxOrNull() ?: 1).coerceAtLeast(1)
+    val trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
     Canvas(modifier.fillMaxWidth().height(100.dp)) {
         val gap = 6f
         val barW = (size.width - gap * (values.size - 1)) / values.size
         values.forEachIndexed { i, v ->
             val h = size.height * (v.toFloat() / max)
+            val x = i * (barW + gap) + barW / 2
+            drawLine(
+                color = trackColor,
+                start = Offset(x, size.height),
+                end = Offset(x, 0f),
+                strokeWidth = barW,
+                cap = StrokeCap.Round
+            )
             drawLine(
                 color = barColor,
-                start = Offset(i * (barW + gap) + barW / 2, size.height),
-                end = Offset(i * (barW + gap) + barW / 2, size.height - h.coerceAtLeast(2f)),
+                start = Offset(x, size.height),
+                end = Offset(x, size.height - h.coerceAtLeast(4f)),
                 strokeWidth = barW,
                 cap = StrokeCap.Round
             )

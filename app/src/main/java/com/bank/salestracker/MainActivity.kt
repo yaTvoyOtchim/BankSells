@@ -33,8 +33,9 @@ class MainActivity : FragmentActivity() {
                 val darkTheme = isSystemInDarkTheme()
 
                 DisposableEffect(darkTheme) {
-                    window.statusBarColor = Color.TRANSPARENT
-                    window.navigationBarColor = Color.TRANSPARENT
+                    val systemBarColor = if (darkTheme) Color.rgb(2, 9, 24) else Color.TRANSPARENT
+                    window.statusBarColor = systemBarColor
+                    window.navigationBarColor = systemBarColor
                     WindowCompat.getInsetsController(window, window.decorView).apply {
                         isAppearanceLightStatusBars = !darkTheme
                         isAppearanceLightNavigationBars = !darkTheme
