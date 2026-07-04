@@ -42,6 +42,8 @@ class VtbAppState(
     var planStatus by mutableStateOf<String?>(null)
     var exportMessage by mutableStateOf<String?>(null)
     var toastMessage by mutableStateOf<String?>(null)
+    var officeUidInput by mutableStateOf("")
+    var officeBindStatus by mutableStateOf<String?>(null)
 
     fun go(target: AppScreen) {
         if (isManagerScreen(target) && currentUser?.role != Role.Manager) return
@@ -63,6 +65,7 @@ class VtbAppState(
                 screen = AppScreen.AdminHome
             }
             Role.Employee -> {
+                loadEmployeeOfficeInput(user)
                 screen = AppScreen.EmployeeHome
             }
         }
@@ -73,7 +76,22 @@ class VtbAppState(
         val user = repository.registerEmployee(name, office, pin)
         currentUser = user
         lastCreatedUid = user.uid
+        loadEmployeeOfficeInput(user)
         screen = AppScreen.UidCreated
+    }
+
+    fun bindCurrentEmployeeToOffice(): Boolean {
+        val user = currentUser?.takeIf { it.role == Role.Employee } ?: return false
+        val updated = repository.bindEmployeeToOffice(user.id, officeUidInput)
+        return if (updated == null) {
+            officeBindStatus = "Офис не найден. Проверьте UID у руководителя"
+            false
+        } else {
+            currentUser = updated
+            loadEmployeeOfficeInput(updated)
+            officeBindStatus = "Офис привязан: ${updated.office}"
+            true
+        }
     }
 
     fun openManagerHome() {
@@ -369,6 +387,11 @@ class VtbAppState(
     private fun managerAllTeam(): List<TeamMemberSummary> {
         val manager = currentUser?.takeIf { it.role == Role.Manager } ?: return emptyList()
         return repository.teamSummaries(manager.id)
+    }
+
+    private fun loadEmployeeOfficeInput(user: User) {
+        officeUidInput = repository.officeJoinCodeFor(user).orEmpty()
+        officeBindStatus = null
     }
 
     private fun isManagerScreen(target: AppScreen): Boolean =

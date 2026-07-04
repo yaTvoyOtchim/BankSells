@@ -370,11 +370,14 @@ fun ManagerProfileScreen(state: VtbAppState) {
                 AppCard {
                     Text(user?.name ?: "Руководитель ВТБ", style = MaterialTheme.typography.titleLarge, color = VtbText)
                     Text("Руководитель · ${state.managerTeam().size} сотрудников", style = MaterialTheme.typography.bodyMedium, color = VtbMuted)
+                    Spacer(Modifier.height(12.dp))
+                    Text("UID офиса для сотрудников", style = MaterialTheme.typography.bodyMedium, color = VtbMuted)
+                    Text(user?.officeId.orEmpty(), style = MaterialTheme.typography.headlineMedium, color = VtbBlue)
                 }
                 AppCard {
                     Text("Как добавить сотрудника", style = MaterialTheme.typography.titleMedium, color = VtbText)
                     Text(
-                        "Попросите сотрудника зарегистрироваться и прислать UID. После привязки он появится в разделе «Команда».",
+                        "Передайте сотруднику UID офиса. Когда он введет этот код при регистрации или в профиле, он появится в разделе «Команда».",
                         style = MaterialTheme.typography.bodyMedium,
                         color = VtbMuted
                     )

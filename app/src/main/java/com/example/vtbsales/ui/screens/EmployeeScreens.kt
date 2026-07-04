@@ -360,6 +360,18 @@ fun EmployeeProfileScreen(state: VtbAppState) {
                     Text(user?.uid.orEmpty(), style = MaterialTheme.typography.headlineMedium, color = VtbBlue)
                 }
                 AppCard {
+                    Text("Привязка к офису", style = MaterialTheme.typography.titleMedium, color = VtbText)
+                    Text("Введите UID офиса от руководителя", style = MaterialTheme.typography.bodyMedium, color = VtbMuted)
+                    Spacer(Modifier.height(12.dp))
+                    VtbTextField(state.officeUidInput, "UID офиса") { state.officeUidInput = it }
+                    Spacer(Modifier.height(10.dp))
+                    PrimaryButton("Сохранить офис") { state.bindCurrentEmployeeToOffice() }
+                    state.officeBindStatus?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = VtbBlue)
+                    }
+                }
+                AppCard {
                     SaleRow("Напоминать о продажах", "каждый день в 18:00", "Вкл")
                     SaleRow("Итоги дня от руководителя", "место в рейтинге", "Вкл")
                     SaleRow("Язык", "интерфейс приложения", "Русский")

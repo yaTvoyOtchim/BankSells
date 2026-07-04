@@ -20,6 +20,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneId
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
@@ -82,10 +85,10 @@ class SalesRepositoryTest {
     }
 
     @Test
-    fun uidLinkingAddsEmployeeToManagerTeam() {
+    fun manualUidLinkingStillAddsUnassignedEmployeeToManagerTeam() {
         val repo = SalesRepository(DemoData.seed())
         val manager = repo.users().first { it.role == Role.Manager }
-        val unlinked = repo.registerEmployee("Новый сотрудник", "8617/0290", "2468")
+        val unlinked = repo.registerEmployee("Новый сотрудник", "Временный офис", "2468")
 
         assertFalse(repo.teamForManager(manager.id).any { it.uid == unlinked.uid })
 
@@ -93,6 +96,76 @@ class SalesRepositoryTest {
 
         assertTrue(linked)
         assertTrue(repo.teamForManager(manager.id).any { it.uid == unlinked.uid })
+    }
+
+    @Test
+    fun newSalesUseActualCurrentDate() {
+        val repo = SalesRepository(DemoData.seed())
+        val expectedToday = LocalDate.now()
+        val employee = repo.registerEmployee("Новый сотрудник", "office-8617-0290", "2468")
+
+        val client = repo.createClientSession(employee.id, "1357")
+        val sale = repo.addProductToClientSession(client.id, ProductType.CreditCard, "КК", 1, 0.0, 30.0)
+
+        assertEquals(expectedToday, employee.createdAt)
+        assertEquals(expectedToday, client.date)
+        assertEquals(expectedToday, sale.date)
+        assertEquals(1, repo.dailyReport(employee.id, expectedToday).products)
+    }
+
+    @Test
+    fun officeReportExportUsesRealDailySalesTotals() {
+        val repo = SalesRepository(DemoData.seed())
+        val admin = repo.users().first { it.role == Role.Admin }
+        val rows = repo.offices().map { repo.officeSummary(it.id) }
+        val expectedReports = repo.visibleTeamFor(admin.id).map { repo.dailyReport(it.id) }
+
+        val export = repo.recordOfficeReportExport(rows, "xlsx", "offices.xlsx")
+
+        assertEquals(expectedReports.sumOf { it.products }, export.products)
+        assertEquals(expectedReports.sumOf { it.clients }, export.clients)
+        assertEquals(expectedReports.sumOf { it.points }, export.points, 0.01)
+        assertEquals(expectedReports.sumOf { it.amount }, export.amount, 0.01)
+    }
+
+    @Test
+    fun officeUidRegistrationBindsEmployeeToOfficeAndManagerTeam() {
+        val repo = SalesRepository(DemoData.seed())
+        val manager = repo.users().first { it.role == Role.Manager }
+
+        val employee = repo.registerEmployee("Новый сотрудник", manager.officeId, "2468")
+
+        assertEquals(manager.officeId, employee.officeId)
+        assertEquals(manager.office, employee.office)
+        assertTrue(repo.teamForManager(manager.id).any { it.id == employee.id })
+        assertTrue(repo.officeSummary(manager.officeId).employees >= 4)
+    }
+
+    @Test
+    fun officeUidRegistrationAcceptsShortBranchCode() {
+        val repo = SalesRepository(DemoData.seed())
+        val manager = repo.users().first { it.role == Role.Manager }
+
+        val employee = repo.registerEmployee("Новый сотрудник", "8617/0290", "2468")
+
+        assertEquals(manager.officeId, employee.officeId)
+        assertEquals(manager.office, employee.office)
+        assertTrue(repo.teamForManager(manager.id).any { it.id == employee.id })
+    }
+
+    @Test
+    fun appStateEmployeeCanBindOfficeUidFromProfile() {
+        val repo = SalesRepository(DemoData.seed())
+        val manager = repo.users().first { it.role == Role.Manager }
+        repo.registerEmployee("Новый сотрудник", "Временный офис", "2468")
+        val state = VtbAppState(repo)
+
+        assertTrue(state.loginWithPin("2468"))
+        state.officeUidInput = manager.officeId
+
+        assertTrue(state.bindCurrentEmployeeToOffice())
+        assertEquals(manager.officeId, state.currentUser!!.officeId)
+        assertTrue(repo.teamForManager(manager.id).any { it.id == state.currentUser!!.id })
     }
 
     @Test
@@ -173,7 +246,10 @@ class SalesRepositoryTest {
 
     @Test
     fun managerPlanPercentUsesCurrentTeamPlan() {
-        val state = VtbAppState(SalesRepository(DemoData.seed()))
+        val date = LocalDate.of(2026, 7, 3)
+        val zone = ZoneId.systemDefault()
+        val clock = Clock.fixed(date.atStartOfDay(zone).toInstant(), zone)
+        val state = VtbAppState(SalesRepository(DemoData.seed(date), clock = clock))
 
         state.loginWithPin("0000")
 

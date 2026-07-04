@@ -143,7 +143,7 @@ private fun WelcomeBullet(text: String) {
 @Composable
 fun RegisterScreen(state: VtbAppState) {
     var name by remember { mutableStateOf("Якименко Никита Дмитриевич") }
-    var office by remember { mutableStateOf("Доп. офис №8617/0290") }
+    var office by remember { mutableStateOf("office-8617-0290") }
     var pin by remember { mutableStateOf("1111") }
     Column(
         modifier = Modifier
@@ -156,19 +156,19 @@ fun RegisterScreen(state: VtbAppState) {
         Spacer(Modifier.height(18.dp))
         Text("Регистрация", style = MaterialTheme.typography.headlineMedium, color = VtbText)
         Text(
-            "После регистрации приложение создаст UID. Передайте его руководителю для привязки к команде.",
+            "Введите UID офиса, который выдал руководитель. Так приложение сразу привяжет профиль к нужному отделению.",
             style = MaterialTheme.typography.bodyMedium,
             color = VtbMuted
         )
         AppCard {
             VtbTextField(name, "ФИО") { name = it }
             Spacer(Modifier.height(10.dp))
-            VtbTextField(office, "Отделение / офис") { office = it }
+            VtbTextField(office, "UID офиса от руководителя") { office = it }
             Spacer(Modifier.height(10.dp))
             VtbTextField(pin, "PIN-код") { pin = it.take(4) }
         }
         PrimaryButton("Продолжить") {
-            state.registerEmployee(name.ifBlank { "Сотрудник ВТБ" }, office.ifBlank { "Офис ВТБ" }, pin.ifBlank { "1111" })
+            state.registerEmployee(name.ifBlank { "Сотрудник ВТБ" }, office.ifBlank { "office-8617-0290" }, pin.ifBlank { "1111" })
         }
         SecondaryButton("Назад") { state.screen = AppScreen.Welcome }
     }
@@ -188,7 +188,7 @@ fun UidCreatedScreen(state: VtbAppState) {
         Spacer(Modifier.height(20.dp))
         Text("Аккаунт создан", style = MaterialTheme.typography.headlineMedium, color = VtbText)
         Text(
-            "Передайте UID руководителю, чтобы он привязал вас к отделу.",
+            "Профиль создан и привязан к офису. Личный UID можно использовать для ручной проверки у руководителя.",
             style = MaterialTheme.typography.bodyMedium,
             color = VtbMuted,
             textAlign = TextAlign.Center
@@ -200,6 +200,13 @@ fun UidCreatedScreen(state: VtbAppState) {
                 state.lastCreatedUid.orEmpty(),
                 style = MaterialTheme.typography.headlineMedium,
                 color = VtbBlue
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("Офис", style = MaterialTheme.typography.bodyMedium, color = VtbMuted)
+            Text(
+                state.currentUser?.office.orEmpty(),
+                style = MaterialTheme.typography.titleMedium,
+                color = VtbText
             )
         }
         Spacer(Modifier.height(16.dp))

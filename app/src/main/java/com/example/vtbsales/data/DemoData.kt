@@ -12,9 +12,7 @@ import com.example.vtbsales.model.Office
 import java.time.LocalDate
 
 object DemoData {
-    private val today: LocalDate = LocalDate.of(2026, 7, 3)
-
-    fun seed(): SalesSeed {
+    fun seed(today: LocalDate = LocalDate.now()): SalesSeed {
         val officePrimary = Office(
             id = "office-8617-0290",
             title = "Доп. офис №8617/0290",

@@ -20,13 +20,15 @@ import com.example.vtbsales.model.ClientSessionDetail
 import com.example.vtbsales.model.EmployeeDetail
 import com.example.vtbsales.model.Office
 import com.example.vtbsales.model.OfficeSummary
+import java.time.Clock
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.roundToInt
 
 class SalesRepository(
     seed: SalesSeed,
-    private val localStore: SalesLocalStore? = null
+    private val localStore: SalesLocalStore? = null,
+    private val clock: Clock = Clock.systemDefaultZone()
 ) {
     private val users = seed.users.toMutableList()
     private val sales = seed.sales.toMutableList()
@@ -41,17 +43,27 @@ class SalesRepository(
             .map { Office(it.officeId, it.office, "", "") }
             .distinctBy { it.id }
     }.toMutableList()
-    private val today: LocalDate = LocalDate.of(2026, 7, 3)
+    private val today: LocalDate
+        get() = LocalDate.now(clock)
 
     companion object {
-        fun local(context: Context, seed: SalesSeed = DemoData.seed()): SalesRepository =
+        fun local(
+            context: Context,
+            seed: SalesSeed = DemoData.seed(),
+            clock: Clock = Clock.systemDefaultZone()
+        ): SalesRepository =
             fromLocalStore(
                 SalesLocalStore(SalesDatabase.get(context).salesDao()),
-                seed
+                seed,
+                clock
             )
 
-        fun fromLocalStore(localStore: SalesLocalStore, seed: SalesSeed): SalesRepository =
-            SalesRepository(localStore.loadSeedOrSeed(seed), localStore)
+        fun fromLocalStore(
+            localStore: SalesLocalStore,
+            seed: SalesSeed,
+            clock: Clock = Clock.systemDefaultZone()
+        ): SalesRepository =
+            SalesRepository(localStore.loadSeedOrSeed(seed), localStore, clock)
     }
 
     fun users(): List<User> = users.toList()
@@ -159,23 +171,32 @@ class SalesRepository(
     fun registerEmployee(name: String, office: String, pin: String): User {
         val next = users.count { it.role == Role.Employee } + 1
         val uid = "VTB-${(100 + next * 37)}-${(700 + next * 19)}"
+        val resolvedOffice = resolveOffice(office)
+        val officeTitle = resolvedOffice?.title ?: office.ifBlank { "Офис ВТБ" }
+        val officeId = resolvedOffice?.id ?: officeTitle
         val employee = User(
             id = "employee-new-$next",
             uid = uid,
             name = name,
             role = Role.Employee,
-            office = office,
+            office = officeTitle,
             pinHashDemo = pin,
-            createdAt = today
+            createdAt = today,
+            officeId = officeId
         )
         users += employee
         localStore?.upsertUser(employee)
+        if (resolvedOffice != null) linkEmployeeToOfficeManagers(employee, resolvedOffice)
         return employee
     }
 
     fun linkEmployeeToManager(managerId: String, employeeUid: String): Boolean {
         val manager = users.firstOrNull { it.id == managerId && it.role == Role.Manager } ?: return false
         val employee = users.firstOrNull { it.uid == employeeUid && it.role == Role.Employee } ?: return false
+        val index = users.indexOfFirst { it.id == employee.id }
+        val updatedEmployee = employee.copy(office = manager.office, officeId = manager.officeId)
+        users[index] = updatedEmployee
+        localStore?.upsertUser(updatedEmployee)
         if (teamLinks.any { it.managerId == manager.id && it.employeeId == employee.id }) return false
         val link = TeamLink(manager.id, employee.id, manager.office)
         teamLinks += link
@@ -183,13 +204,28 @@ class SalesRepository(
         return true
     }
 
+    fun bindEmployeeToOffice(userId: String, officeUid: String): User? {
+        val office = resolveOffice(officeUid) ?: return null
+        val index = users.indexOfFirst { it.id == userId && it.role == Role.Employee }
+        if (index < 0) return null
+        val updated = users[index].copy(office = office.title, officeId = office.id)
+        users[index] = updated
+        localStore?.upsertUser(updated)
+        linkEmployeeToOfficeManagers(updated, office)
+        return updated
+    }
+
+    fun officeJoinCodeFor(user: User): String? =
+        offices.firstOrNull { it.id == user.officeId }?.id
+
     fun teamForManager(managerId: String): List<User> {
+        val manager = users.firstOrNull { it.id == managerId && it.role == Role.Manager } ?: return emptyList()
         val employeeIds = teamLinks
             .filter { it.managerId == managerId }
             .map { it.employeeId }
             .toSet()
         return users
-            .filter { it.id in employeeIds && it.role == Role.Employee }
+            .filter { it.id in employeeIds && it.role == Role.Employee && it.officeId == manager.officeId }
             .sortedBy { it.name }
     }
 
@@ -339,6 +375,10 @@ class SalesRepository(
         kind: String,
         fileName: String
     ): ReportExport {
+        val officeIds = rows.map { it.office.id }.toSet()
+        val reports = users
+            .filter { it.role == Role.Employee && it.officeId in officeIds }
+            .map { dailyReport(it.id) }
         val report = ReportExport(
             id = nextReportExportId(),
             scope = "office",
@@ -349,10 +389,10 @@ class SalesRepository(
             createdAt = today,
             from = today,
             to = today,
-            products = 0,
-            clients = rows.sumOf { it.employees },
-            points = rows.sumOf { it.dailyPoints },
-            amount = 0.0
+            products = reports.sumOf { it.products },
+            clients = reports.sumOf { it.clients },
+            points = reports.sumOf { it.points },
+            amount = reports.sumOf { it.amount }
         )
         reportExports += report
         localStore?.upsertReportExport(report)
@@ -404,6 +444,42 @@ class SalesRepository(
 
     fun percent(value: Double, target: Double): Int =
         if (target <= 0.0) 0 else ((value / target) * 100).roundToInt().coerceIn(0, 999)
+
+    private fun resolveOffice(rawOfficeUid: String): Office? {
+        val key = rawOfficeUid.normalizedKey()
+        val digits = rawOfficeUid.digitsOnly()
+        if (key.isBlank() && digits.isBlank()) return null
+        val byManagerUid = users
+            .firstOrNull { it.role == Role.Manager && it.uid.normalizedKey() == key }
+            ?.let { manager -> offices.firstOrNull { it.id == manager.officeId } }
+        if (byManagerUid != null) return byManagerUid
+        return offices.firstOrNull { office ->
+            key in office.lookupKeys() || digits.isNotBlank() && digits in office.lookupKeys()
+        }
+    }
+
+    private fun linkEmployeeToOfficeManagers(employee: User, office: Office) {
+        users
+            .filter { it.role == Role.Manager && it.officeId == office.id }
+            .forEach { manager ->
+                if (teamLinks.none { it.managerId == manager.id && it.employeeId == employee.id }) {
+                    val link = TeamLink(manager.id, employee.id, office.title)
+                    teamLinks += link
+                    localStore?.upsertTeamLink(link)
+                }
+            }
+    }
+
+    private fun Office.lookupKeys(): Set<String> =
+        setOf(id.normalizedKey(), title.normalizedKey(), id.digitsOnly(), title.digitsOnly())
+            .filter { it.isNotBlank() }
+            .toSet()
+
+    private fun String.normalizedKey(): String =
+        lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+
+    private fun String.digitsOnly(): String =
+        filter { it.isDigit() }
 
     private fun Double.format1(): String = String.format(Locale.US, "%.1f", this)
     private fun Double.format2(): String = String.format(Locale.US, "%.2f", this)
