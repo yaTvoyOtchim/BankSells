@@ -23,6 +23,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bank.salestracker.data.model.MyReport
 import com.bank.salestracker.di.ServiceLocator
+import com.bank.salestracker.ui.navigation.SalesRefreshSignal
 import com.bank.salestracker.ui.theme.AppBackground
 import com.bank.salestracker.ui.theme.GlassSurface
 import com.bank.salestracker.ui.theme.GlassTopBar
@@ -59,11 +60,16 @@ fun DashboardScreen(
     onAddSale: () -> Unit,
     onLogout: () -> Unit,
     canCreateSales: Boolean = true,
+    refreshSignal: Long = 0L,
     vm: DashboardVm = viewModel()
 ) {
     val user = ServiceLocator.authRepo.currentUser()
     val pending by vm.pendingCount.collectAsState()
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(refreshSignal) {
+        if (SalesRefreshSignal.shouldRefresh(refreshSignal)) vm.refresh()
+    }
 
     AppBackground {
         Scaffold(

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -156,18 +157,28 @@ fun AppNavHost() {
                     }
                 })
             }
-            composable(Dest.Home.route) {
+            composable(Dest.Home.route) { entry ->
+                val salesChangedAt by entry.savedStateHandle
+                    .getStateFlow(SalesRefreshSignal.KEY, 0L)
+                    .collectAsState()
                 DashboardScreen(
                     onAddSale = { nav.navigate(Dest.AddSale.route) },
                     onLogout = {
                         nav.navigate(Dest.Login.route) { popUpTo(0) }
                     },
-                    canCreateSales = canCreateSales
+                    canCreateSales = canCreateSales,
+                    refreshSignal = salesChangedAt
                 )
             }
             composable(Dest.AddSale.route) {
                 if (canCreateSales) {
-                    AddSaleScreen(onSaved = { nav.popBackStack(Dest.Home.route, false) })
+                    AddSaleScreen(onSaved = {
+                        val homeHandle = runCatching {
+                            nav.getBackStackEntry(Dest.Home.route).savedStateHandle
+                        }.getOrNull()
+                        homeHandle?.let(SalesRefreshSignal::markChanged)
+                        nav.popBackStack(Dest.Home.route, false)
+                    })
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Продажи может вносить только сотрудник")
