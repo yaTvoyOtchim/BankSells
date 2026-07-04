@@ -1,5 +1,8 @@
 package com.example.vtbsales
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.example.vtbsales.data.SalesRepository
 import com.example.vtbsales.model.AppScreen
+import com.example.vtbsales.notifications.ReminderScheduler
 import com.example.vtbsales.ui.VtbAppState
 import com.example.vtbsales.ui.screens.AdminHomeScreen
 import com.example.vtbsales.ui.screens.AddSaleScreen
@@ -29,12 +33,27 @@ import com.example.vtbsales.ui.theme.VtbSalesTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestNotificationPermissionIfNeeded()
+        ReminderScheduler.scheduleDaily(applicationContext)
         val repository = SalesRepository.local(applicationContext)
         setContent {
-            val appState = remember { VtbAppState(repository) }
+            val appState = remember {
+                VtbAppState(
+                    repository = repository,
+                    appContext = applicationContext
+                )
+            }
             VtbSalesTheme {
                 VtbSalesApp(appState)
             }
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1730)
         }
     }
 }

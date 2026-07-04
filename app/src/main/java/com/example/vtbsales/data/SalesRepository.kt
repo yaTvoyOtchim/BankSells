@@ -20,6 +20,7 @@ import com.example.vtbsales.model.ClientSessionDetail
 import com.example.vtbsales.model.EmployeeDetail
 import com.example.vtbsales.model.Office
 import com.example.vtbsales.model.OfficeSummary
+import com.example.vtbsales.model.WidgetSalesSummary
 import java.time.Clock
 import java.time.LocalDate
 import java.util.Locale
@@ -73,6 +74,20 @@ class SalesRepository(
     fun offices(): List<Office> = offices.toList()
 
     fun reportExports(): List<ReportExport> = reportExports.toList()
+
+    fun widgetSummaryForUser(userId: String? = null, date: LocalDate = today): WidgetSalesSummary {
+        val user = userId
+            ?.let { id -> users.firstOrNull { it.id == id && it.role == Role.Employee } }
+            ?: users.firstOrNull { it.role == Role.Employee }
+        if (user == null) return WidgetSalesSummary("ВТБ", 0, 0, 0.0)
+        val report = dailyReport(user.id, date)
+        return WidgetSalesSummary(
+            employeeName = user.name,
+            products = report.products,
+            clients = report.clients,
+            points = report.points
+        )
+    }
 
     fun visibleTeamFor(userId: String): List<User> {
         val user = users.firstOrNull { it.id == userId } ?: return emptyList()

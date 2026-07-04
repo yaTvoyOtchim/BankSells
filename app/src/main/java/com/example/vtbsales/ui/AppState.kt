@@ -18,9 +18,13 @@ import com.example.vtbsales.model.Sale
 import com.example.vtbsales.model.SaleEditHistory
 import com.example.vtbsales.model.TeamMemberSummary
 import com.example.vtbsales.model.User
+import com.example.vtbsales.session.SessionStore
+import com.example.vtbsales.widget.SalesWidgetProvider
 
 class VtbAppState(
-    val repository: SalesRepository
+    val repository: SalesRepository,
+    private val appContext: Context? = null,
+    private val sessionStore: SessionStore? = appContext?.let { SessionStore(it) }
 ) {
     var screen by mutableStateOf(AppScreen.Welcome)
     var currentUser by mutableStateOf<User?>(null)
@@ -56,6 +60,7 @@ class VtbAppState(
     fun loginWithPin(pin: String): Boolean {
         val user = repository.loginByPinOrNull(pin) ?: return false
         currentUser = user
+        rememberEmployeeForWidget(user)
         when (user.role) {
             Role.Manager -> {
                 loadManagerPlanInputs()
@@ -77,6 +82,7 @@ class VtbAppState(
         currentUser = user
         lastCreatedUid = user.uid
         loadEmployeeOfficeInput(user)
+        rememberEmployeeForWidget(user)
         screen = AppScreen.UidCreated
     }
 
@@ -89,6 +95,7 @@ class VtbAppState(
         } else {
             currentUser = updated
             loadEmployeeOfficeInput(updated)
+            rememberEmployeeForWidget(updated)
             officeBindStatus = "Офис привязан: ${updated.office}"
             true
         }
@@ -135,6 +142,7 @@ class VtbAppState(
             amount = amount,
             points = points
         )
+        updateWidget()
         toastMessage = "Продукт добавлен к клиенту ${activeClientLabel()}"
         saleCount = "1"
         saleAmount = "0"
@@ -199,6 +207,7 @@ class VtbAppState(
             reason = editReason.ifBlank { "Исправление продажи" }
         )
         toastMessage = "Продажа исправлена"
+        updateWidget()
         editingSaleId = null
         editReason = ""
         saleCount = "1"
@@ -392,6 +401,17 @@ class VtbAppState(
     private fun loadEmployeeOfficeInput(user: User) {
         officeUidInput = repository.officeJoinCodeFor(user).orEmpty()
         officeBindStatus = null
+    }
+
+    private fun rememberEmployeeForWidget(user: User) {
+        if (user.role == Role.Employee) {
+            sessionStore?.saveLastUserId(user.id)
+            updateWidget()
+        }
+    }
+
+    private fun updateWidget() {
+        appContext?.let { SalesWidgetProvider.updateAll(it) }
     }
 
     private fun isManagerScreen(target: AppScreen): Boolean =
