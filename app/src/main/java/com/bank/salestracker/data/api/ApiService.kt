@@ -26,6 +26,25 @@ interface ApiService {
     @POST("sales/batch")
     suspend fun addSalesBatch(@Body body: SaleBatchRequest): List<Sale>
 
+    @GET("products/active")
+    suspend fun activeProducts(): List<ProductSetting>
+
+    @GET("management/offices/{orgUnitId}/products")
+    suspend fun officeProducts(@Path("orgUnitId") orgUnitId: String): List<ProductSetting>
+
+    @PATCH("management/offices/{orgUnitId}/products/{productId}")
+    suspend fun updateOfficeProduct(
+        @Path("orgUnitId") orgUnitId: String,
+        @Path("productId") productId: String,
+        @Body body: ProductSettingPatch
+    ): ProductSetting
+
+    @GET("admin/products")
+    suspend fun adminProducts(): List<ProductSetting>
+
+    @POST("admin/products")
+    suspend fun createProduct(@Body body: ProductCreateRequest): ProductSetting
+
     @GET("sales/my")
     suspend fun mySales(
         @Query("from") from: String? = null,

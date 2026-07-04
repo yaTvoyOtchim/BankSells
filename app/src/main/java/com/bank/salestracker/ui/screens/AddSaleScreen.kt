@@ -14,29 +14,36 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bank.salestracker.data.model.ProductCategory
+import com.bank.salestracker.data.model.ProductSetting
 import com.bank.salestracker.data.model.SaleBatchItem
 import com.bank.salestracker.di.ServiceLocator
 import kotlinx.coroutines.launch
 
-private val moneyProducts = setOf(
-    ProductCategory.PDS,
-    ProductCategory.OPIF,
-    ProductCategory.KSP
-)
-
 class AddSaleVm : ViewModel() {
     var clientLast4 by mutableStateOf("")
-    var selectedProducts = mutableStateListOf<ProductCategory>()
-    var amounts = mutableStateMapOf<ProductCategory, String>()
+    var products by mutableStateOf<List<ProductSetting>>(emptyList())
+    var selectedProducts = mutableStateListOf<ProductSetting>()
+    var amounts = mutableStateMapOf<String, String>()
     var comment by mutableStateOf("")
     var loading by mutableStateOf(false)
+    var loadingProducts by mutableStateOf(true)
     var message by mutableStateOf<String?>(null)
 
-    fun toggleProduct(product: ProductCategory) {
-        if (selectedProducts.contains(product)) {
-            selectedProducts.remove(product)
-            amounts.remove(product)
+    init {
+        loadProducts()
+    }
+
+    fun loadProducts() = viewModelScope.launch {
+        loadingProducts = true
+        runCatching { products = ServiceLocator.salesRepo.activeProducts() }
+            .onFailure { message = "Не удалось загрузить продукты офиса" }
+        loadingProducts = false
+    }
+
+    fun toggleProduct(product: ProductSetting) {
+        if (selectedProducts.any { it.productId == product.productId }) {
+            selectedProducts.removeAll { it.productId == product.productId }
+            amounts.remove(product.productId)
         } else {
             selectedProducts.add(product)
         }
@@ -55,14 +62,14 @@ class AddSaleVm : ViewModel() {
 
         val items = mutableListOf<SaleBatchItem>()
         for (product in selectedProducts) {
-            val amount = amounts[product]?.replace(",", ".")?.toDoubleOrNull()
-            if (product in moneyProducts && (amount == null || amount <= 0)) {
+            val amount = amounts[product.productId]?.replace(",", ".")?.toDoubleOrNull()
+            if (product.requiresAmount && (amount == null || amount <= 0)) {
                 message = "Укажите сумму для ${product.title}"
                 return
             }
             items.add(
                 SaleBatchItem(
-                    category = product,
+                    productId = product.productId,
                     amount = amount,
                     quantity = 1,
                     comment = comment.ifBlank { null }
@@ -111,20 +118,29 @@ fun AddSaleScreen(onSaved: () -> Unit, vm: AddSaleVm = viewModel()) {
             )
 
             Text("Продукты", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProductCategory.entries.forEach { product ->
-                    FilterChip(
-                        selected = product in vm.selectedProducts,
-                        onClick = { vm.toggleProduct(product) },
-                        label = { Text(product.title) }
-                    )
+            when {
+                vm.loadingProducts -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                vm.products.isEmpty() -> {
+                    Text("Для вашего офиса пока нет активных продуктов", color = MaterialTheme.colorScheme.outline)
+                    OutlinedButton(onClick = vm::loadProducts) { Text("Обновить") }
+                }
+                else -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    vm.products.sortedBy { it.sortOrder }.forEach { product ->
+                        FilterChip(
+                            selected = vm.selectedProducts.any { it.productId == product.productId },
+                            onClick = { vm.toggleProduct(product) },
+                            label = { Text(product.title) }
+                        )
+                    }
                 }
             }
 
-            vm.selectedProducts.filter { it in moneyProducts }.forEach { product ->
+            vm.selectedProducts.filter { it.requiresAmount }.forEach { product ->
                 OutlinedTextField(
-                    value = vm.amounts[product].orEmpty(),
-                    onValueChange = { vm.amounts[product] = it.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' } },
+                    value = vm.amounts[product.productId].orEmpty(),
+                    onValueChange = { vm.amounts[product.productId] = it.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' } },
                     label = { Text("${product.title}: сумма, ₽") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -142,7 +158,7 @@ fun AddSaleScreen(onSaved: () -> Unit, vm: AddSaleVm = viewModel()) {
 
             Button(
                 onClick = { vm.save(onSaved) },
-                enabled = !vm.loading,
+                enabled = !vm.loading && !vm.loadingProducts && vm.products.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 val count = vm.selectedProducts.size

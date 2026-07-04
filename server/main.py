@@ -775,6 +775,19 @@ def _agg(db, user_id: str | None, start: str, end: str, org_ids: list[str] | Non
     return row["c"], row["a"]
 
 
+def _points(db, user_id: str | None, start: str, end: str, org_ids: list[str] | None = None) -> float:
+    query = "SELECT COALESCE(SUM(points_snapshot*quantity),0) p FROM sales WHERE created_at>=? AND created_at<?"
+    params: list = [start, end]
+    if user_id:
+        query += " AND user_id=?"
+        params.append(user_id)
+    extra, extra_params = org_filter_sql("org_unit_id", org_ids)
+    query += extra
+    params.extend(extra_params)
+    row = db.execute(query, params).fetchone()
+    return row["p"]
+
+
 @app.get("/api/reports/my")
 def my_report(user: dict = Depends(require_work_access)):
     t_start, t_end = period_bounds("today")
@@ -782,10 +795,15 @@ def my_report(user: dict = Depends(require_work_access)):
     with d.connect() as db:
         today_c, today_a = _agg(db, user["id"], t_start, t_end)
         month_c, month_a = _agg(db, user["id"], m_start, m_end)
+        today_points = _points(db, user["id"], t_start, t_end)
+        month_points = _points(db, user["id"], m_start, m_end)
         total = db.execute("SELECT COALESCE(SUM(quantity),0) c FROM sales WHERE user_id=?", (user["id"],)).fetchone()["c"]
         by_cat = db.execute(
-            "SELECT category, SUM(quantity) c, COALESCE(SUM(amount*quantity),0) a FROM sales "
-            "WHERE user_id=? AND created_at>=? AND created_at<? GROUP BY category",
+            "SELECT COALESCE(product_code_snapshot, category) category, "
+            "COALESCE(product_title_snapshot, category) product_title, SUM(quantity) c, "
+            "COALESCE(SUM(amount*quantity),0) a, COALESCE(SUM(points_snapshot*quantity),0) p FROM sales "
+            "WHERE user_id=? AND created_at>=? AND created_at<? "
+            "GROUP BY COALESCE(product_code_snapshot, category), COALESCE(product_title_snapshot, category)",
             (user["id"], m_start, m_end),
         ).fetchall()
         days = []
@@ -797,10 +815,20 @@ def my_report(user: dict = Depends(require_work_access)):
     return {
         "todayCount": today_c,
         "todayAmount": today_a,
+        "todayPoints": today_points,
         "monthCount": month_c,
         "monthAmount": month_a,
+        "monthPoints": month_points,
         "totalCount": total,
-        "byCategory": [{"category": r["category"], "count": r["c"], "totalAmount": r["a"]} for r in by_cat],
+        "byCategory": [
+            {
+                "category": r["category"],
+                "productTitle": r["product_title"],
+                "count": r["c"],
+                "totalAmount": r["a"],
+                "totalPoints": r["p"],
+            } for r in by_cat
+        ],
         "last14Days": days,
         "monthlyGoal": user["monthly_goal"],
     }
@@ -836,6 +864,8 @@ def admin_report(period: str = "month", manager: dict = Depends(require_manager)
         org_ids = visible_org_ids(db, manager)
         b_today, _ = _agg(db, None, t_start, t_end, org_ids)
         b_month_c, b_month_a = _agg(db, None, m_start, m_end, org_ids)
+        b_today_points = _points(db, None, t_start, t_end, org_ids)
+        b_month_points = _points(db, None, m_start, m_end, org_ids)
         employee_filter, employee_params = org_filter_sql("primary_org_unit_id", org_ids)
         employees = []
         users = db.execute(
@@ -845,6 +875,7 @@ def admin_report(period: str = "month", manager: dict = Depends(require_manager)
         for user_row in users:
             today_count, _ = _agg(db, user_row["id"], t_start, t_end)
             period_count, period_amount = _agg(db, user_row["id"], p_start, p_end)
+            period_points = _points(db, user_row["id"], p_start, p_end)
             month_count, _ = _agg(db, user_row["id"], m_start, m_end)
             goal = user_row["monthly_goal"]
             employees.append({
@@ -852,20 +883,34 @@ def admin_report(period: str = "month", manager: dict = Depends(require_manager)
                 "todayCount": today_count,
                 "monthCount": period_count,
                 "monthAmount": period_amount,
+                "monthPoints": period_points,
                 "goalProgress": (month_count / goal) if goal else None,
             })
         sale_filter, sale_params = org_filter_sql("org_unit_id", org_ids)
         by_cat = db.execute(
-            "SELECT category, SUM(quantity) c, COALESCE(SUM(amount*quantity),0) a FROM sales "
-            "WHERE created_at>=? AND created_at<? " + sale_filter + " GROUP BY category",
+            "SELECT COALESCE(product_code_snapshot, category) category, "
+            "COALESCE(product_title_snapshot, category) product_title, SUM(quantity) c, "
+            "COALESCE(SUM(amount*quantity),0) a, COALESCE(SUM(points_snapshot*quantity),0) p FROM sales "
+            "WHERE created_at>=? AND created_at<? " + sale_filter +
+            " GROUP BY COALESCE(product_code_snapshot, category), COALESCE(product_title_snapshot, category)",
             [p_start, p_end] + sale_params,
         ).fetchall()
     return {
         "branchTodayCount": b_today,
+        "branchTodayPoints": b_today_points,
         "branchMonthCount": b_month_c,
         "branchMonthAmount": b_month_a,
+        "branchMonthPoints": b_month_points,
         "employees": employees,
-        "byCategory": [{"category": r["category"], "count": r["c"], "totalAmount": r["a"]} for r in by_cat],
+        "byCategory": [
+            {
+                "category": r["category"],
+                "productTitle": r["product_title"],
+                "count": r["c"],
+                "totalAmount": r["a"],
+                "totalPoints": r["p"],
+            } for r in by_cat
+        ],
     }
 
 

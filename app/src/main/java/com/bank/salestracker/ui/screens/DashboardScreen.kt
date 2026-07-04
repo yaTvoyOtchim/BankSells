@@ -51,7 +51,12 @@ class DashboardVm : ViewModel() {
 private val money: NumberFormat = NumberFormat.getCurrencyInstance(Locale("ru", "RU"))
 
 @Composable
-fun DashboardScreen(onAddSale: () -> Unit, onLogout: () -> Unit, vm: DashboardVm = viewModel()) {
+fun DashboardScreen(
+    onAddSale: () -> Unit,
+    onLogout: () -> Unit,
+    canCreateSales: Boolean = true,
+    vm: DashboardVm = viewModel()
+) {
     val user = ServiceLocator.authRepo.currentUser()
     val pending by vm.pendingCount.collectAsState()
     val scope = rememberCoroutineScope()
@@ -73,8 +78,10 @@ fun DashboardScreen(onAddSale: () -> Unit, onLogout: () -> Unit, vm: DashboardVm
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onAddSale) {
-                Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Продажа")
+            if (canCreateSales) {
+                ExtendedFloatingActionButton(onClick = onAddSale) {
+                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Продажа")
+                }
             }
         }
     ) { pad ->
@@ -109,7 +116,7 @@ fun DashboardScreen(onAddSale: () -> Unit, onLogout: () -> Unit, vm: DashboardVm
                         ) {
                             Text("СЕГОДНЯ", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
                             Text("${r.todayCount}", style = MaterialTheme.typography.displayMedium, color = Color.White)
-                            Text("продаж на ${money.format(r.todayAmount)}", color = Color.White.copy(alpha = .9f))
+                            Text("продаж на ${money.format(r.todayAmount)} · ${formatPoints(r.todayPoints)} б.", color = Color.White.copy(alpha = .9f))
                             Spacer(Modifier.height(16.dp))
                             Row {
                                 Column(Modifier.weight(1f)) {
@@ -119,6 +126,10 @@ fun DashboardScreen(onAddSale: () -> Unit, onLogout: () -> Unit, vm: DashboardVm
                                 Column(Modifier.weight(1f)) {
                                     Text("СУММА", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
                                     Text(money.format(r.monthAmount), style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text("БАЛЛЫ", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .8f))
+                                    Text(formatPoints(r.monthPoints), style = MaterialTheme.typography.headlineSmall, color = Color.White)
                                 }
                             }
                         }
@@ -158,6 +169,9 @@ fun DashboardScreen(onAddSale: () -> Unit, onLogout: () -> Unit, vm: DashboardVm
         }
     }
 }
+
+private fun formatPoints(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else "%.1f".format(value)
 
 @Composable
 fun MiniBarChart(values: List<Int>, modifier: Modifier = Modifier, barColor: Color = MaterialTheme.colorScheme.primary) {

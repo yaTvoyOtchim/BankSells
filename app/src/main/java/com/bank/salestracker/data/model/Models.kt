@@ -63,6 +63,8 @@ fun Role.isManager(): Boolean = this in setOf(
     Role.ADMIN
 )
 
+fun Role.canCreateSales(): Boolean = this == Role.EMPLOYEE
+
 @Serializable
 data class OrgUnit(
     val id: String,
@@ -80,8 +82,40 @@ data class AssignmentRequest(
 )
 
 @Serializable
+data class ProductSetting(
+    val id: String,
+    val productId: String,
+    val code: String,
+    val title: String,
+    val groupName: String = "",
+    val active: Boolean = true,
+    val points: Double = 1.0,
+    val requiresAmount: Boolean = false,
+    val countsTowardPlan: Boolean = true,
+    val sortOrder: Int = 0
+)
+
+@Serializable
+data class ProductSettingPatch(
+    val active: Boolean? = null,
+    val points: Double? = null,
+    val requiresAmount: Boolean? = null,
+    val countsTowardPlan: Boolean? = null,
+    val sortOrder: Int? = null
+)
+
+@Serializable
+data class ProductCreateRequest(
+    val code: String,
+    val title: String,
+    val groupName: String = "",
+    val description: String? = null
+)
+
+@Serializable
 data class SaleBatchItem(
-    val category: ProductCategory,
+    val productId: String? = null,
+    val category: ProductCategory? = null,
     val amount: Double? = null,
     val quantity: Int = 1,
     val comment: String? = null
@@ -122,10 +156,20 @@ enum class ProductCategory(val title: String) {
     SALARY_LIGHT("ЗП лайт")
 }
 
+fun productTitleForCode(code: String): String =
+    ProductCategory.entries.firstOrNull { it.name == code }?.title ?: code
+
 @Serializable
 data class Sale(
     val id: String? = null,
-    val category: ProductCategory,
+    val category: String,
+    val productId: String? = null,
+    val productTitle: String? = null,
+    val productGroup: String? = null,
+    val points: Double = 0.0,
+    val pointsTotal: Double = 0.0,
+    val requiresAmount: Boolean = false,
+    val countsTowardPlan: Boolean = true,
     val clientLast4: String,
     val saleGroupId: String? = null,
     val amount: Double? = null,
@@ -136,12 +180,18 @@ data class Sale(
     val employeeName: String? = null
 )
 
+fun Sale.displayTitle(): String = productTitle ?: productTitleForCode(category)
+
 @Serializable
 data class CategoryStat(
-    val category: ProductCategory,
+    val category: String,
+    val productTitle: String? = null,
     val count: Int,
-    val totalAmount: Double
+    val totalAmount: Double,
+    val totalPoints: Double = 0.0
 )
+
+fun CategoryStat.displayTitle(): String = productTitle ?: productTitleForCode(category)
 
 @Serializable
 data class DayPoint(val date: String, val count: Int)
@@ -150,8 +200,10 @@ data class DayPoint(val date: String, val count: Int)
 data class MyReport(
     val todayCount: Int,
     val todayAmount: Double,
+    val todayPoints: Double = 0.0,
     val monthCount: Int,
     val monthAmount: Double,
+    val monthPoints: Double = 0.0,
     val totalCount: Int,
     val byCategory: List<CategoryStat>,
     val last14Days: List<DayPoint>,
@@ -164,14 +216,17 @@ data class EmployeeSummary(
     val todayCount: Int,
     val monthCount: Int,
     val monthAmount: Double,
+    val monthPoints: Double = 0.0,
     val goalProgress: Float? = null
 )
 
 @Serializable
 data class AdminReport(
     val branchTodayCount: Int,
+    val branchTodayPoints: Double = 0.0,
     val branchMonthCount: Int,
     val branchMonthAmount: Double,
+    val branchMonthPoints: Double = 0.0,
     val employees: List<EmployeeSummary>,
     val byCategory: List<CategoryStat>
 )

@@ -57,7 +57,11 @@ class SalesRepository(
         pendingDao.insert(
             PendingSale(
                 saleGroupId = sale.saleGroupId ?: UUID.randomUUID().toString(),
-                category = sale.category.name,
+                productId = sale.productId,
+                productTitleSnapshot = sale.productTitle,
+                pointsSnapshot = sale.points,
+                requiresAmountSnapshot = sale.requiresAmount,
+                category = sale.category,
                 clientLast4 = sale.clientLast4,
                 amount = sale.amount,
                 quantity = sale.quantity,
@@ -77,7 +81,8 @@ class SalesRepository(
             pendingDao.insert(
                 PendingSale(
                     saleGroupId = groupId,
-                    category = item.category.name,
+                    productId = item.productId,
+                    category = item.category?.name.orEmpty(),
                     clientLast4 = clientLast4,
                     amount = item.amount,
                     quantity = item.quantity,
@@ -101,6 +106,12 @@ class SalesRepository(
 
     suspend fun mySales(from: String? = null, to: String? = null) = api.mySales(from, to)
     suspend fun deleteSale(id: String) = api.deleteSale(id)
+    suspend fun activeProducts() = api.activeProducts()
+    suspend fun officeProducts(orgUnitId: String) = api.officeProducts(orgUnitId)
+    suspend fun updateOfficeProduct(orgUnitId: String, productId: String, body: ProductSettingPatch) =
+        api.updateOfficeProduct(orgUnitId, productId, body)
+    suspend fun adminProducts() = api.adminProducts()
+    suspend fun createProduct(body: ProductCreateRequest) = api.createProduct(body)
     suspend fun myReport(): MyReport {
         runCatching { syncPending() }
         return api.myReport()

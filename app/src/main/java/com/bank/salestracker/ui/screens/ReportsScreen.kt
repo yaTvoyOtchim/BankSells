@@ -20,6 +20,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bank.salestracker.data.model.MyReport
 import com.bank.salestracker.data.model.Sale
+import com.bank.salestracker.data.model.displayTitle
 import com.bank.salestracker.di.ServiceLocator
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -55,12 +56,12 @@ class ReportsVm : ViewModel() {
         return buildString {
             appendLine("📊 Отчёт по продажам — ${LocalDate.now()}")
             appendLine("Сотрудник: ${user?.fullName}")
-            appendLine("Сегодня: ${r.todayCount} шт. на ${"%,.0f".format(r.todayAmount)} ₽")
-            appendLine("За месяц: ${r.monthCount} шт. на ${"%,.0f".format(r.monthAmount)} ₽")
+            appendLine("Сегодня: ${r.todayCount} шт. на ${"%,.0f".format(r.todayAmount)} ₽ · ${formatPoints(r.todayPoints)} б.")
+            appendLine("За месяц: ${r.monthCount} шт. на ${"%,.0f".format(r.monthAmount)} ₽ · ${formatPoints(r.monthPoints)} б.")
             appendLine()
             appendLine("По продуктам (месяц):")
             r.byCategory.sortedByDescending { it.count }.forEach {
-                appendLine("• ${it.category.title}: ${it.count}")
+                appendLine("• ${it.displayTitle()}: ${it.count} · ${formatPoints(it.totalPoints)} б.")
             }
         }
     }
@@ -105,10 +106,11 @@ fun ReportsScreen(vm: ReportsVm = viewModel()) {
                 }
                 items(r.byCategory.sortedByDescending { it.count }) { c ->
                     ListItem(
-                        headlineContent = { Text(c.category.title) },
+                        headlineContent = { Text(c.displayTitle()) },
                         trailingContent = {
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("${c.count} шт.", style = MaterialTheme.typography.titleSmall)
+                                Text("${formatPoints(c.totalPoints)} б.", style = MaterialTheme.typography.bodySmall)
                                 if (c.totalAmount > 0)
                                     Text("%,.0f ₽".format(c.totalAmount), style = MaterialTheme.typography.bodySmall)
                             }
@@ -128,7 +130,7 @@ fun ReportsScreen(vm: ReportsVm = viewModel()) {
             items(vm.todaySales, key = { it.id ?: it.hashCode() }) { s ->
                 Card {
                     ListItem(
-                        headlineContent = { Text(s.category.title) },
+                        headlineContent = { Text(s.displayTitle()) },
                         supportingContent = {
                             Column {
                                 s.amount?.let { Text("%,.0f ₽".format(it)) }
@@ -146,3 +148,6 @@ fun ReportsScreen(vm: ReportsVm = viewModel()) {
         }
     }
 }
+
+private fun formatPoints(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else "%.1f".format(value)

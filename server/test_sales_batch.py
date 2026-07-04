@@ -132,6 +132,35 @@ class SalesBatchTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_my_report_sums_points_from_sale_snapshots(self):
+        product_id = self._product_id("PDS")
+        with self.main.d.connect() as db:
+            db.execute(
+                "UPDATE office_product_settings SET points=4 WHERE product_id=?",
+                (product_id,),
+            )
+        response = self.client.post(
+            "/api/sales/batch",
+            headers={"Authorization": f"Bearer {self.employee_token}"},
+            json={
+                "clientLast4": "3333",
+                "items": [{"productId": product_id, "quantity": 2, "amount": 10000}],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        report = self.client.get(
+            "/api/reports/my",
+            headers={"Authorization": f"Bearer {self.employee_token}"},
+        )
+
+        self.assertEqual(report.status_code, 200, report.text)
+        body = report.json()
+        self.assertEqual(body["todayPoints"], 8)
+        self.assertEqual(body["monthPoints"], 8)
+        pds = next(item for item in body["byCategory"] if item["category"] == "PDS")
+        self.assertEqual(pds["totalPoints"], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +30,7 @@ import com.bank.salestracker.data.model.EmployeeSummary
 import com.bank.salestracker.data.model.RegistrationStatus
 import com.bank.salestracker.data.model.Sale
 import com.bank.salestracker.data.model.User
+import com.bank.salestracker.data.model.displayTitle
 import com.bank.salestracker.di.ServiceLocator
 import kotlinx.coroutines.launch
 
@@ -101,7 +103,11 @@ class AdminVm : ViewModel() {
 }
 
 @Composable
-fun AdminScreen(onEmployeeClick: (String) -> Unit, vm: AdminVm = viewModel()) {
+fun AdminScreen(
+    onEmployeeClick: (String) -> Unit,
+    onProductsClick: () -> Unit,
+    vm: AdminVm = viewModel()
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var goalDialogFor by remember { mutableStateOf<EmployeeSummary?>(null) }
@@ -135,6 +141,16 @@ fun AdminScreen(onEmployeeClick: (String) -> Unit, vm: AdminVm = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
+            item {
+                Card(Modifier.fillMaxWidth().clickable(onClick = onProductsClick)) {
+                    ListItem(
+                        leadingContent = { Icon(Icons.Default.Settings, null) },
+                        headlineContent = { Text("Продукты офиса") },
+                        supportingContent = { Text("Баллы, активность и сумма по продуктам") }
+                    )
+                }
+            }
+
             item { AddEmployeePanel(vm) }
 
             item {
@@ -165,6 +181,7 @@ fun AdminScreen(onEmployeeClick: (String) -> Unit, vm: AdminVm = viewModel()) {
                             MetricColumn("${report.branchTodayCount}", "сегодня", Modifier.weight(1f))
                             MetricColumn("${report.branchMonthCount}", "за месяц", Modifier.weight(1f))
                             MetricColumn("%,.0f".format(report.branchMonthAmount), "₽ за месяц", Modifier.weight(1f))
+                            MetricColumn(formatPoints(report.branchMonthPoints), "баллы", Modifier.weight(1f))
                         }
                     }
                 }
@@ -194,7 +211,7 @@ fun AdminScreen(onEmployeeClick: (String) -> Unit, vm: AdminVm = viewModel()) {
                             headlineContent = { Text(employee.user.fullName) },
                             supportingContent = {
                                 Column {
-                                    Text("Сегодня: ${employee.todayCount} · Период: ${employee.monthCount} · %,.0f ₽".format(employee.monthAmount))
+                                    Text("Сегодня: ${employee.todayCount} · Период: ${employee.monthCount} · ${formatPoints(employee.monthPoints)} б. · %,.0f ₽".format(employee.monthAmount))
                                     employee.goalProgress?.let { progress ->
                                         Spacer(Modifier.height(4.dp))
                                         LinearProgressIndicator(
@@ -311,6 +328,9 @@ private fun statusTitle(status: RegistrationStatus): String = when (status) {
     RegistrationStatus.DEACTIVATED -> "деактивирован"
 }
 
+private fun formatPoints(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else "%.1f".format(value)
+
 class EmployeeDetailVm : ViewModel() {
     var sales by mutableStateOf<List<Sale>>(emptyList())
     var loading by mutableStateOf(true)
@@ -336,7 +356,7 @@ fun EmployeeDetailScreen(employeeId: String, vm: EmployeeDetailVm = viewModel())
             items(vm.sales) { sale ->
                 Card {
                     ListItem(
-                        headlineContent = { Text(sale.category.title) },
+                        headlineContent = { Text(sale.displayTitle()) },
                         supportingContent = {
                             Column {
                                 Text("Клиент: ${sale.clientLast4}")

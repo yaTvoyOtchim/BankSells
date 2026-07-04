@@ -17,6 +17,10 @@ import kotlinx.coroutines.flow.Flow
 data class PendingSale(
     @PrimaryKey(autoGenerate = true) val localId: Long = 0,
     val saleGroupId: String?,
+    val productId: String? = null,
+    val productTitleSnapshot: String? = null,
+    val pointsSnapshot: Double? = null,
+    val requiresAmountSnapshot: Boolean? = null,
     val category: String,
     val clientLast4: String?,
     val amount: Double?,
@@ -25,16 +29,12 @@ data class PendingSale(
     val createdAtLocal: Long = System.currentTimeMillis()
 ) {
     fun toSale() = Sale(
-        category = ProductCategory.entries.firstOrNull { it.name == category } ?: when (category) {
-            "DEBIT_CARD" -> ProductCategory.DEBIT_CARD_STICKER_APPLICATION
-            "CREDIT_CARD" -> ProductCategory.CREDIT_CARD_SALE
-            "CONSUMER_LOAN", "MORTGAGE" -> ProductCategory.CASH_LOAN_SALE
-            "DEPOSIT" -> ProductCategory.SAVINGS_ACCOUNT
-            "INSURANCE" -> ProductCategory.CREDIT_CARD_INSURANCE
-            "INVESTMENT" -> ProductCategory.OPIF
-            "MOBILE_APP" -> ProductCategory.SUBSCRIPTION
-            else -> ProductCategory.SOM
-        },
+        category = category.ifBlank { productCategory().name },
+        productId = productId,
+        productTitle = productTitleSnapshot,
+        points = pointsSnapshot ?: 0.0,
+        pointsTotal = (pointsSnapshot ?: 0.0) * quantity,
+        requiresAmount = requiresAmountSnapshot ?: false,
         clientLast4 = clientLast4 ?: "0000",
         amount = amount,
         quantity = quantity,
@@ -42,7 +42,8 @@ data class PendingSale(
     )
 
     fun toBatchItem() = SaleBatchItem(
-        category = productCategory(),
+        productId = productId,
+        category = if (productId == null) productCategory() else null,
         amount = amount,
         quantity = quantity,
         comment = comment
@@ -70,7 +71,7 @@ interface PendingSaleDao {
     @Query("DELETE FROM pending_sales") suspend fun clear()
 }
 
-@Database(entities = [PendingSale::class], version = 3, exportSchema = false)
+@Database(entities = [PendingSale::class], version = 4, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
     abstract fun pendingSaleDao(): PendingSaleDao
 
@@ -86,10 +87,18 @@ abstract class AppDb : RoomDatabase() {
                 db.execSQL("ALTER TABLE pending_sales ADD COLUMN saleGroupId TEXT")
             }
         }
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_sales ADD COLUMN productId TEXT")
+                db.execSQL("ALTER TABLE pending_sales ADD COLUMN productTitleSnapshot TEXT")
+                db.execSQL("ALTER TABLE pending_sales ADD COLUMN pointsSnapshot REAL")
+                db.execSQL("ALTER TABLE pending_sales ADD COLUMN requiresAmountSnapshot INTEGER")
+            }
+        }
 
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context, AppDb::class.java, "sales.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
     }
