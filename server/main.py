@@ -14,21 +14,34 @@ import db as d
 
 TZ = ZoneInfo(os.environ.get("SALES_TZ", "Europe/Istanbul"))
 
-CATEGORIES = {
-    "DEBIT_CARD", "CREDIT_CARD", "CONSUMER_LOAN", "MORTGAGE",
-    "DEPOSIT", "INSURANCE", "INVESTMENT", "MOBILE_APP", "OTHER",
-}
 CATEGORY_TITLES = {
-    "DEBIT_CARD": "Дебетовая карта",
-    "CREDIT_CARD": "Кредитная карта",
-    "CONSUMER_LOAN": "Потреб. кредит",
-    "MORTGAGE": "Ипотека",
-    "DEPOSIT": "Вклад",
-    "INSURANCE": "Страховка",
-    "INVESTMENT": "Инвестиции",
-    "MOBILE_APP": "Моб. приложение",
-    "OTHER": "Другое",
+    "DEBIT_CARD_STICKER_APPLICATION": "ДК/стик(по заявке)",
+    "CREDIT_CARD_SALE": "КК(продажа)",
+    "CREDIT_CARD_APPLICATION": "КК(по заявке)",
+    "PDS": "ПДС",
+    "CREDIT_CARD_INSURANCE": "Страховка КК",
+    "SOM": "СОМ",
+    "KSP": "КСП",
+    "STICKER": "СТИК",
+    "PENSION": "Пенсия",
+    "SALARY_PROJECT": "ИЗП",
+    "CASH_LOAN_APPLICATION": "КН Заявка",
+    "CASH_LOAN_SALE": "КН продажа",
+    "SUBSCRIPTION": "Подписка",
+    "CARD_PLUS": "Карта+",
+    "SOCIAL_PAYOUTS": "Соц. Выплаты",
+    "MASS_ISSUE": "Масс. выдача",
+    "OPIF": "ОПИФ",
+    "AUTO_PAYMENTS": "Автоплатежи",
+    "SAVINGS_ACCOUNT": "Накопительный счет",
+    "AUTO_PULLING": "Автостягивание",
+    "FAMILY_BANK": "Сем. Банк",
+    "SALARY_CARD_ISSUE": "Выдача ЗП карт",
+    "DEBIT_CARD_ADDITIONAL": "ДК(доп.карта)",
+    "PRIVILEGE": "Привилегия",
+    "SALARY_LIGHT": "ЗП лайт",
 }
+CATEGORIES = set(CATEGORY_TITLES)
 
 EMPLOYEE_ID_RE = re.compile(r"^vtb\d+$")
 PENDING_ASSIGNMENT = "PENDING_ASSIGNMENT"

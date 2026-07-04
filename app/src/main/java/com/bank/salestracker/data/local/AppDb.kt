@@ -23,7 +23,16 @@ data class PendingSale(
     val createdAtLocal: Long = System.currentTimeMillis()
 ) {
     fun toSale() = Sale(
-        category = ProductCategory.valueOf(category),
+        category = ProductCategory.entries.firstOrNull { it.name == category } ?: when (category) {
+            "DEBIT_CARD" -> ProductCategory.DEBIT_CARD_STICKER_APPLICATION
+            "CREDIT_CARD" -> ProductCategory.CREDIT_CARD_SALE
+            "CONSUMER_LOAN", "MORTGAGE" -> ProductCategory.CASH_LOAN_SALE
+            "DEPOSIT" -> ProductCategory.SAVINGS_ACCOUNT
+            "INSURANCE" -> ProductCategory.CREDIT_CARD_INSURANCE
+            "INVESTMENT" -> ProductCategory.OPIF
+            "MOBILE_APP" -> ProductCategory.SUBSCRIPTION
+            else -> ProductCategory.SOM
+        },
         clientLast4 = clientLast4 ?: "0000",
         amount = amount,
         quantity = quantity,

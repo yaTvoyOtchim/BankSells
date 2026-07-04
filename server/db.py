@@ -120,6 +120,19 @@ def migrate(db) -> None:
     db.execute("UPDATE users SET created_at=? WHERE created_at IS NULL", (now,))
     db.execute("UPDATE users SET updated_at=? WHERE updated_at IS NULL", (now,))
     db.execute("UPDATE sales SET updated_at=created_at WHERE updated_at IS NULL")
+    legacy_categories = {
+        "DEBIT_CARD": "DEBIT_CARD_STICKER_APPLICATION",
+        "CREDIT_CARD": "CREDIT_CARD_SALE",
+        "CONSUMER_LOAN": "CASH_LOAN_SALE",
+        "MORTGAGE": "CASH_LOAN_SALE",
+        "DEPOSIT": "SAVINGS_ACCOUNT",
+        "INSURANCE": "CREDIT_CARD_INSURANCE",
+        "INVESTMENT": "OPIF",
+        "MOBILE_APP": "SUBSCRIPTION",
+        "OTHER": "SOM",
+    }
+    for old, new in legacy_categories.items():
+        db.execute("UPDATE sales SET category=? WHERE category=?", (new, old))
 
 
 def _get_or_create_org_unit(db, name: str, unit_type: str, code: str, parent_id: str | None = None) -> str:

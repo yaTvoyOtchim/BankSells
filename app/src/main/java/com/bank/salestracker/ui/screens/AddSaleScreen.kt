@@ -28,13 +28,6 @@ class AddSaleVm : ViewModel() {
     var loading by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
 
-    private val needsAmount get() = category in setOf(
-        ProductCategory.CONSUMER_LOAN,
-        ProductCategory.MORTGAGE,
-        ProductCategory.DEPOSIT,
-        ProductCategory.INVESTMENT
-    )
-
     fun save(onSaved: () -> Unit) {
         val last4 = clientLast4.filter(Char::isDigit).take(4)
         if (last4.length != 4) {
@@ -47,10 +40,6 @@ class AddSaleVm : ViewModel() {
         }
         val qty = quantity.toIntOrNull()?.coerceIn(1, 99) ?: 1
         val amt = amount.replace(",", ".").toDoubleOrNull()
-        if (needsAmount && (amt == null || amt <= 0)) {
-            message = "Укажите сумму сделки"
-            return
-        }
 
         viewModelScope.launch {
             loading = true
